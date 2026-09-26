@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:photo_per_day/core/constants/app_constants.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 
 /// Service responsible for calculating actual local disk storage consumed
@@ -12,6 +13,17 @@ import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 /// - De-duplicated: Ensures each unique file path is counted at most once.
 class LocalStorageCalculator {
   const LocalStorageCalculator();
+
+  /// Practical threshold in bytes for local photo storage warning.
+  /// Defaults to [AppConstants.photoStorageWarningThresholdBytes] (500 MB).
+  static int storageWarningThresholdBytes =
+      AppConstants.photoStorageWarningThresholdBytes;
+
+  /// Checks whether local photo storage exceeds the warning threshold.
+  static bool isStorageWarning({required int bytes, int? customThreshold}) {
+    final threshold = customThreshold ?? storageWarningThresholdBytes;
+    return bytes >= threshold;
+  }
 
   /// Calculates total bytes used by all app-managed photo files on disk.
   static Future<int> calculateTotalPhotoBytes({

@@ -35,7 +35,14 @@ import 'package:photo_per_day/widgets/settings_tile.dart';
 /// customizable preferences (daily reminders, week start, theme),
 /// cloud backup status preview, account rows, and informational modals.
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  /// When true, developer-facing test controls (such as single-photo test upload)
+  /// are exposed. In normal production UI, this remains false.
+  final bool showDeveloperTools;
+
+  /// Global flag to enable developer options in tests.
+  static bool enableDeveloperTools = false;
+
+  const ProfileScreen({super.key, this.showDeveloperTools = false});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -94,7 +101,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  bool get _isDeveloperToolsEnabled =>
+      widget.showDeveloperTools || ProfileScreen.enableDeveloperTools;
+
   Future<void> _handleSignOut() async {
+    final queue = PersistentDailyPhotoStore.instance.syncQueue;
+    final pendingCount = queue.count;
+
+    if (pendingCount > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadii.dialogRadius,
+              side: BorderSide(color: AppColors.border, width: 0.8),
+            ),
+            title: const Text(
+              'Sign Out of Google Account?',
+              style: TextStyle(
+                fontSize: 18.0,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            content: Text(
+              'You have $pendingCount photo${pendingCount == 1 ? '' : 's'} waiting to sync to Google Drive.\n\n'
+              'Signing out will pause cloud sync. Your local photos and diary entries will remain completely safe on this device.\n\n'
+              'Pending sync operations will resume when you sign back in.',
+              style: AppTypography.body.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.45,
+              ),
+            ),
+            actionsPadding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 10.0,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(
+                  'Sign Out',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true) return;
+    }
+
     await GoogleAuthService.instance.signOut();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -160,6 +233,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _handleDisconnect() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: const RoundedRectangleBorder(
+            borderRadius: AppRadii.dialogRadius,
+            side: BorderSide(color: AppColors.border, width: 0.8),
+          ),
+          title: const Text(
+            'Disconnect Google Account?',
+            style: TextStyle(
+              fontSize: 18.0,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          content: Text(
+            'Your local photos and diary entries will remain completely safe on this device.\n\n'
+            'Disconnecting revokes Google Drive access and stops cloud backups. '
+            'Photos already backed up to Google Drive will NOT be deleted.',
+            style: AppTypography.body.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+          actionsPadding: const EdgeInsets.symmetric(
+            horizontal: 16.0,
+            vertical: 10.0,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                'Disconnect',
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
     await GoogleDriveService.instance.clearFolderReference();
     await GoogleDriveAuthService.instance.clearAuthorization();
     await GoogleAuthService.instance.disconnect();
@@ -633,7 +764,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       _buildSyncSummaryTile(photoStore, auth),
                       _buildDriveBackupTile(auth, driveAuth, drive),
-                      if (drive.isReady) _buildTestUploadTile(),
+                      if (_isDeveloperToolsEnabled && drive.isReady)
+                        _buildTestUploadTile(),
                       _buildSyncNowTile(
                         auth,
                         driveAuth,
@@ -642,6 +774,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         photoStore,
                       ),
                       _buildLocalStorageTile(photoStore),
+                      if (LocalStorageCalculator.isStorageWarning(
+                        bytes: _localPhotoBytes,
+                      ))
+                        _buildStorageWarningTile(),
                     ],
                   ),
 
@@ -653,9 +789,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildAccountTile(auth),
                       if (auth.isSignedIn)
                         SettingsTile(
-                          title: 'Revoke Permissions',
-                          subtitle:
-                              'Disconnect Google account and revoke access',
+                          title: 'Disconnect Account',
+                          subtitle: 'Revoke Drive permissions and sign out',
                           leadingIcon: Icons.link_off_rounded,
                           leadingColor: AppColors.statIconNeutral,
                           showChevron: true,
@@ -1031,16 +1166,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Builds accurate local device storage tile calculated from actual on-disk files
+  /// Builds accurate local photo storage tile calculated from actual on-disk files
   Widget _buildLocalStorageTile(PersistentDailyPhotoStore photoStore) {
-    final totalMemories = photoStore.count;
+    final totalPhotos = photoStore.count;
     final storageSizeText = _isLoadingStorage
         ? 'Calculating...'
         : LocalStorageCalculator.formatBytes(_localPhotoBytes);
-    final subtitleText = '$totalMemories memories • $storageSizeText';
+    final photoWord = totalPhotos == 1 ? 'photo' : 'photos';
+    final subtitleText = '$totalPhotos $photoWord • $storageSizeText';
 
     return SettingsTile(
-      title: 'Local Device Storage',
+      title: 'Local Photo Storage',
       subtitle: subtitleText,
       leadingIcon: Icons.sd_storage_outlined,
       leadingColor: AppColors.statIconBlueGrey,
@@ -1056,7 +1192,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 side: BorderSide(color: AppColors.border, width: 0.8),
               ),
               title: const Text(
-                'Local Storage',
+                'Local Photo Storage',
                 style: TextStyle(
                   fontSize: 18.0,
                   fontWeight: FontWeight.w700,
@@ -1068,7 +1204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$totalMemories memories stored locally on this device.',
+                    '$totalPhotos $photoWord stored locally on this device.',
                     style: AppTypography.body.copyWith(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w600,
@@ -1076,9 +1212,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Total storage used: $storageSizeText\n\n'
+                    'App photo storage: $storageSizeText\n\n'
                     'All original photos are stored in app-managed persistent storage. '
-                    'Storage calculation verifies actual on-disk file sizes.',
+                    'Storage calculation verifies actual on-disk file sizes.\n\n'
+                    'This represents only the storage used by Photo a Day photos, not your entire phone storage.',
                     style: AppTypography.body.copyWith(
                       color: AppColors.textSecondary,
                       height: 1.45,
@@ -1095,6 +1232,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text(
                     'Close',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Builds an advisory storage warning tile when local photo storage exceeds threshold
+  Widget _buildStorageWarningTile() {
+    final formattedSize = LocalStorageCalculator.formatBytes(_localPhotoBytes);
+    final formattedThreshold = LocalStorageCalculator.formatBytes(
+      LocalStorageCalculator.storageWarningThresholdBytes,
+    );
+
+    return SettingsTile(
+      title: 'Photo storage is getting large',
+      subtitle:
+          'Local photos use $formattedSize (advisory threshold: $formattedThreshold). Tap for details.',
+      leadingIcon: Icons.warning_amber_rounded,
+      leadingColor: AppColors.warning,
+      showChevron: true,
+      onTap: () {
+        showDialog<void>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: const RoundedRectangleBorder(
+                borderRadius: AppRadii.dialogRadius,
+                side: BorderSide(color: AppColors.border, width: 0.8),
+              ),
+              title: const Text(
+                'Photo Storage Advisory',
+                style: TextStyle(
+                  fontSize: 18.0,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Local photo storage is currently $formattedSize.',
+                    style: AppTypography.body.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Photo a Day stores original photos locally on your device for fast offline viewing. '
+                    'This advisory warning appears when the app\'s photo storage exceeds $formattedThreshold.\n\n'
+                    'This is an app-level threshold and does not mean your device storage is full. '
+                    'Your local photos and diary memories remain completely safe on your device.',
+                    style: AppTypography.body.copyWith(
+                      color: AppColors.textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+              actionsPadding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 10.0,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text(
+                    'Understood',
                     style: TextStyle(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,

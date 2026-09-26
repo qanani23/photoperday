@@ -297,9 +297,11 @@ void main() {
       photoStore: photoStore,
     );
     GoogleDrivePhotoUploadService.setTestInstance(uploadService);
+    ProfileScreen.enableDeveloperTools = true;
   });
 
   tearDown(() async {
+    ProfileScreen.enableDeveloperTools = false;
     PersistentDailyPhotoStore.resetTestInstance();
     GoogleDrivePhotoUploadService.resetInstance();
     GoogleDriveService.resetInstance();

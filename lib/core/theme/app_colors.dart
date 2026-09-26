@@ -54,4 +54,5 @@ abstract final class AppColors {
 
   // Status & Feedback
   static const Color error = Color(0xFFD32F2F);
+  static const Color warning = Color(0xFFE69500);
 }
