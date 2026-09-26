@@ -8,6 +8,7 @@ import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
 import 'package:photo_per_day/data/models/sync_presentation_model.dart';
+import 'package:photo_per_day/data/services/memory_service.dart';
 import 'package:photo_per_day/data/services/mock_photo_service.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/sync_coordinator.dart';
@@ -178,7 +179,101 @@ class _TodayScreenState extends State<TodayScreen> {
             duration: const Duration(milliseconds: 250),
             child: _hasPhoto ? _buildPhotoState() : _buildEmptyState(),
           ),
+
+          // On This Day Memories Banner (subtle, secondary, only when memories exist)
+          _buildMemoriesBanner(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMemoriesBanner() {
+    final today = DateTime(2026, 3, 15);
+    final memories = MemoryService.instance.getMemoriesForDate(
+      today,
+      store: PersistentDailyPhotoStore.instance,
+    );
+    if (memories.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final count = memories.length;
+    final text = count == 1
+        ? '1 memory from years past'
+        : '$count memories from years past';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          onTap: () {
+            Navigator.of(context).pushNamed(
+              AppConstants.memoriesRoute,
+              arguments: today,
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm + 2,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.md),
+              border: Border.all(color: AppColors.border, width: 0.8),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36.0,
+                  height: 36.0,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.history_rounded,
+                    color: AppColors.accent,
+                    size: 20.0,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'On This Day',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 1.5),
+                      Text(
+                        text,
+                        style: const TextStyle(
+                          fontSize: 12.0,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14.0,
+                  color: AppColors.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -18,6 +18,21 @@ import 'package:photo_per_day/services/gallery_photo_service.dart';
 import 'package:photo_per_day/widgets/photo_source_sheet.dart';
 import 'package:photo_per_day/widgets/visual_diary_entry.dart';
 
+/// Route arguments for configuring [SwipeDaysScreen].
+class SwipeDaysArguments {
+  const SwipeDaysArguments({
+    this.initialDateKey,
+    this.filterDateKeys,
+    this.customTitle,
+    this.customSubtitle,
+  });
+
+  final DateKey? initialDateKey;
+  final List<DateKey>? filterDateKeys;
+  final String? customTitle;
+  final String? customSubtitle;
+}
+
 /// Immersive "Swipe Through Days" screen that lets the user browse their recorded
 /// daily photos chronologically via horizontal swipes.
 ///
@@ -34,6 +49,9 @@ class SwipeDaysScreen extends StatefulWidget {
     this.initialDateKey,
     this.store,
     this.onCaptureTap,
+    this.filterDateKeys,
+    this.customTitle,
+    this.customSubtitle,
   });
 
   /// Optional specific date to open the viewer onto.
@@ -44,6 +62,15 @@ class SwipeDaysScreen extends StatefulWidget {
 
   /// Optional photo capture hook for testing.
   final VoidCallback? onCaptureTap;
+
+  /// Optional subset of [DateKey]s to restrict browsing to (e.g. for "On This Day" memories).
+  final List<DateKey>? filterDateKeys;
+
+  /// Optional custom title for the viewer (defaults to "Daily Journal").
+  final String? customTitle;
+
+  /// Optional custom subtitle descriptor (defaults to "recorded days").
+  final String? customSubtitle;
 
   @override
   State<SwipeDaysScreen> createState() => _SwipeDaysScreenState();
@@ -146,7 +173,11 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
   List<PhotoEntry> _getChronologicalEntries() {
     final todayKey = DateKey.today();
     final entries = _store.allEntries.where((entry) {
-      return entry.dateKey.compareTo(todayKey) <= 0;
+      if (entry.dateKey.compareTo(todayKey) > 0) return false;
+      if (widget.filterDateKeys != null) {
+        return widget.filterDateKeys!.contains(entry.dateKey);
+      }
+      return true;
     }).toList();
 
     // Chronological order: oldest first, newest last
@@ -307,10 +338,13 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Daily Journal', style: AppTypography.appTitle),
+                Text(
+                  widget.customTitle ?? 'Daily Journal',
+                  style: AppTypography.appTitle,
+                ),
                 const SizedBox(height: 2.0),
                 Text(
-                  '${index + 1} of $total recorded days',
+                  '${index + 1} of $total ${widget.customSubtitle ?? "recorded days"}',
                   style: AppTypography.caption.copyWith(
                     fontWeight: FontWeight.w600,
                     color: AppColors.textSecondary,

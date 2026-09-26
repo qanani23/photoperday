@@ -8,4 +8,5 @@ abstract final class AppConstants {
   static const String photoDetailRoute = '/photo-detail';
   static const String diaryRoute = '/diary';
   static const String swipeDaysRoute = '/swipe-days';
+  static const String memoriesRoute = '/memories';
 }

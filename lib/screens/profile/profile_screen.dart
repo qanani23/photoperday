@@ -468,6 +468,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () =>
                     Navigator.pushNamed(context, AppConstants.diaryRoute),
               ),
+              SettingsTile(
+                title: 'On This Day',
+                subtitle: 'Look back at memories from years past',
+                leadingIcon: Icons.history_rounded,
+                leadingColor: AppColors.accent,
+                showChevron: true,
+                onTap: () =>
+                    Navigator.pushNamed(context, AppConstants.memoriesRoute),
+              ),
             ],
           ),
 

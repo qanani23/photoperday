@@ -229,6 +229,17 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
             const SizedBox(width: AppSpacing.xs),
             IconButton(
               icon: const Icon(
+                Icons.history_rounded,
+                color: AppColors.accent,
+                size: 22.0,
+              ),
+              tooltip: 'On This Day Memories',
+              onPressed: () {
+                Navigator.of(context).pushNamed(AppConstants.memoriesRoute);
+              },
+            ),
+            IconButton(
+              icon: const Icon(
                 Icons.view_carousel_rounded,
                 color: AppColors.textPrimary,
                 size: 22.0,

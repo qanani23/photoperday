@@ -4,6 +4,7 @@ import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/mock_photo_service.dart';
+import 'package:photo_per_day/screens/diary/memories_screen.dart';
 import 'package:photo_per_day/screens/diary/swipe_days_screen.dart';
 import 'package:photo_per_day/screens/diary/visual_diary_screen.dart';
 import 'package:photo_per_day/screens/main_shell.dart';
@@ -23,9 +24,28 @@ abstract final class AppRouter {
           builder: (_) => const VisualDiaryScreen(),
           settings: settings,
         );
+      case AppConstants.memoriesRoute:
+        DateTime? targetDate;
+        if (settings.arguments is DateTime) {
+          targetDate = settings.arguments as DateTime;
+        }
+        return MaterialPageRoute<void>(
+          builder: (_) => MemoriesScreen(targetDate: targetDate),
+          settings: settings,
+        );
       case AppConstants.swipeDaysRoute:
         DateKey? initialDateKey;
-        if (settings.arguments is DateKey) {
+        List<DateKey>? filterDateKeys;
+        String? customTitle;
+        String? customSubtitle;
+
+        if (settings.arguments is SwipeDaysArguments) {
+          final args = settings.arguments as SwipeDaysArguments;
+          initialDateKey = args.initialDateKey;
+          filterDateKeys = args.filterDateKeys;
+          customTitle = args.customTitle;
+          customSubtitle = args.customSubtitle;
+        } else if (settings.arguments is DateKey) {
           initialDateKey = settings.arguments as DateKey;
         } else if (settings.arguments is PhotoEntry) {
           initialDateKey = (settings.arguments as PhotoEntry).dateKey;
@@ -33,7 +53,12 @@ abstract final class AppRouter {
           initialDateKey = DateKey.fromDateTime(settings.arguments as DateTime);
         }
         return MaterialPageRoute<void>(
-          builder: (_) => SwipeDaysScreen(initialDateKey: initialDateKey),
+          builder: (_) => SwipeDaysScreen(
+            initialDateKey: initialDateKey,
+            filterDateKeys: filterDateKeys,
+            customTitle: customTitle,
+            customSubtitle: customSubtitle,
+          ),
           settings: settings,
         );
       case AppConstants.photoDetailRoute:
