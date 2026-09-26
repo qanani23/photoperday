@@ -67,6 +67,13 @@ class DateKey implements Comparable<DateKey> {
   /// Whether this [DateKey] represents the user's current local calendar day.
   bool get isToday => this == DateKey.today();
 
+  /// Returns the immediately preceding calendar day.
+  DateKey get previousDay =>
+      DateKey.fromDateTime(DateTime(year, month, day - 1));
+
+  /// Returns the immediately succeeding calendar day.
+  DateKey get nextDay => DateKey.fromDateTime(DateTime(year, month, day + 1));
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

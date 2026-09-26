@@ -20,6 +20,7 @@ import 'package:photo_per_day/data/services/google_drive_photo_upload_service.da
 import 'package:photo_per_day/data/services/google_drive_service.dart';
 import 'package:photo_per_day/data/services/local_storage_calculator.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
+import 'package:photo_per_day/data/services/streak_service.dart';
 import 'package:photo_per_day/data/services/sync_coordinator.dart';
 import 'package:photo_per_day/data/services/sync_queue.dart';
 import 'package:photo_per_day/data/services/sync_worker.dart';
@@ -1663,37 +1664,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  /// Understated Statistics Section
+  /// Photo Streak Section reflecting live persistent photo records
   Widget _buildStatisticsSection() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatItem(
-            value: '74',
-            label: 'Photos',
-            icon: Icons.photo_library_outlined,
-            color: AppColors.accent,
+    return ListenableBuilder(
+      listenable: PersistentDailyPhotoStore.instance,
+      builder: (context, _) {
+        final summary = StreakService.instance.calculateStreak();
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppRadii.card,
+            border: Border.all(color: AppColors.border, width: 0.8),
+            boxShadow: AppShadows.card,
           ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _buildStatItem(
-            value: '74',
-            label: 'Days',
-            icon: Icons.calendar_today_outlined,
-            color: AppColors.statDaysGreen,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('PHOTO STREAK', style: AppTypography.appTagline),
+                  Icon(
+                    Icons.local_fire_department_rounded,
+                    size: 16.0,
+                    color: summary.currentStreak > 0
+                        ? AppColors.statStreakOrange
+                        : AppColors.textMuted,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatItem(
+                      value: summary.currentStreak == 1
+                          ? '1 day'
+                          : '${summary.currentStreak} days',
+                      label: 'Current Streak',
+                      icon: Icons.local_fire_department_rounded,
+                      color: summary.currentStreak > 0
+                          ? AppColors.statStreakOrange
+                          : AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: _buildStatItem(
+                      value: summary.longestStreak == 1
+                          ? '1 day'
+                          : '${summary.longestStreak} days',
+                      label: 'Longest Streak',
+                      icon: Icons.trending_up_rounded,
+                      color: summary.longestStreak > 0
+                          ? AppColors.accent
+                          : AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: _buildStatItem(
+                      value: summary.totalRecordedDays == 1
+                          ? '1 day'
+                          : '${summary.totalRecordedDays} days',
+                      label: 'Recorded Days',
+                      icon: Icons.calendar_today_outlined,
+                      color: summary.totalRecordedDays > 0
+                          ? AppColors.statDaysGreen
+                          : AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _buildStatItem(
-            value: '18',
-            label: 'Streak',
-            icon: Icons.local_fire_department_rounded,
-            color: AppColors.statStreakOrange,
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -1704,34 +1752,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 4.0),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: AppRadii.card,
-        border: Border.all(color: AppColors.border, width: 0.8),
-        boxShadow: AppShadows.card,
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+        border: Border.all(color: AppColors.border, width: 0.6),
       ),
       child: Column(
         children: [
-          Icon(icon, size: 16.0, color: color),
-          const SizedBox(height: 4.0),
+          Icon(icon, size: 15.0, color: color),
+          const SizedBox(height: 3.0),
           Text(
             value,
             style: const TextStyle(
-              fontSize: 17.0,
+              fontSize: 14.0,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
-              letterSpacing: -0.3,
+              letterSpacing: -0.2,
             ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 1.0),
           Text(
             label,
             style: const TextStyle(
-              fontSize: 11.0,
+              fontSize: 10.0,
               fontWeight: FontWeight.w500,
               color: AppColors.textMuted,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
