@@ -13,11 +13,28 @@ import 'package:photo_per_day/screens/statistics/statistics_screen.dart';
 
 /// Centralized application route definitions and generator.
 abstract final class AppRouter {
+  /// Global navigator key for notification and deep-link routing.
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
+  /// Navigates directly to the Today tab (e.g. from reminder notification tap).
+  static void navigateToToday() {
+    navigatorKey.currentState?.pushNamedAndRemoveUntil(
+      AppConstants.initialRoute,
+      (route) => false,
+      arguments: 1,
+    );
+  }
+
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       case AppConstants.initialRoute:
+        int initialIndex = 0;
+        if (settings.arguments is int) {
+          initialIndex = settings.arguments as int;
+        }
         return MaterialPageRoute<void>(
-          builder: (_) => const MainShell(),
+          builder: (_) => MainShell(initialIndex: initialIndex),
           settings: settings,
         );
       case AppConstants.diaryRoute:

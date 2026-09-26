@@ -14,6 +14,7 @@ import 'package:photo_per_day/data/models/sync_operation_status.dart';
 import 'package:photo_per_day/data/models/sync_operation_type.dart';
 import 'package:photo_per_day/data/models/sync_presentation_model.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
+import 'package:photo_per_day/data/services/daily_reminder_service.dart';
 import 'package:photo_per_day/data/services/google_auth_service.dart';
 import 'package:photo_per_day/data/services/google_drive_auth_service.dart';
 import 'package:photo_per_day/data/services/google_drive_photo_upload_service.dart';
@@ -41,8 +42,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _reminderEnabled = true;
-  final String _reminderTime = '8:00 PM';
   String _startOfWeek = 'Sunday';
   double? _uploadProgress;
   int _localPhotoBytes = 0;
@@ -175,21 +174,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _toggleReminder(bool value) {
-    setState(() {
-      _reminderEnabled = value;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          value
-              ? 'Daily reminder enabled for $_reminderTime'
-              : 'Daily reminder disabled',
+  Future<void> _toggleReminder(bool value) async {
+    final reminderService = DailyReminderService.instance;
+    final success = await reminderService.setEnabled(value);
+
+    if (!mounted) return;
+
+    if (value && !success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Notification permission is required to enable daily reminders.',
+          ),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
         ),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            value
+                ? 'Daily reminder enabled for ${reminderService.settings.formattedTime}'
+                : 'Daily reminder disabled',
+          ),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _pickReminderTime() async {
+    final reminderService = DailyReminderService.instance;
+    final currentTime = TimeOfDay(
+      hour: reminderService.settings.hour,
+      minute: reminderService.settings.minute,
     );
+
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: currentTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.accent,
+              onPrimary: AppColors.surface,
+              surface: AppColors.surface,
+              onSurface: AppColors.textPrimary,
+            ),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+    );
+
+    if (selected != null && mounted) {
+      await reminderService.setTime(
+        hour: selected.hour,
+        minute: selected.minute,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Daily reminder time set to ${reminderService.settings.formattedTime}',
+            ),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   void _showStartOfWeekDialog() {
@@ -400,58 +457,108 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: AppSpacing.lg),
 
           // Preferences Group
-          SettingsGroup(
-            title: 'Preferences',
-            children: [
-              SettingsTile(
-                title: 'Daily Reminder',
-                subtitle: _reminderEnabled
-                    ? '$_reminderTime • Evening reflection'
-                    : 'Reminders turned off',
-                leadingIcon: Icons.notifications_outlined,
-                leadingColor: AppColors.accent,
-                trailing: Switch.adaptive(
-                  value: _reminderEnabled,
-                  onChanged: _toggleReminder,
-                  activeThumbColor: AppColors.textPrimary,
-                  activeTrackColor: AppColors.surfaceSubtle,
-                ),
-              ),
-              SettingsTile(
-                title: 'Start of Week',
-                subtitle: 'Calendar grid layout',
-                leadingIcon: Icons.calendar_view_week_outlined,
-                leadingColor: AppColors.statDaysGreen,
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10.0,
-                    vertical: 4.0,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(8.0),
-                    border: Border.all(color: AppColors.border, width: 0.8),
-                  ),
-                  child: Text(
-                    _startOfWeek,
-                    style: const TextStyle(
-                      fontSize: 12.0,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+          ListenableBuilder(
+            listenable: DailyReminderService.instance,
+            builder: (context, _) {
+              final reminderService = DailyReminderService.instance;
+              final String reminderSubtitle;
+              if (reminderService.permissionDenied) {
+                reminderSubtitle =
+                    'Permission denied • Enable in system settings';
+              } else if (reminderService.isEnabled) {
+                reminderSubtitle =
+                    'Every day · ${reminderService.settings.formattedTime}';
+              } else {
+                reminderSubtitle =
+                    'Get a daily reminder to capture your photo.';
+              }
+
+              return SettingsGroup(
+                title: 'Preferences',
+                children: [
+                  SettingsTile(
+                    title: 'Daily Reminder',
+                    subtitle: reminderSubtitle,
+                    leadingIcon: Icons.notifications_outlined,
+                    leadingColor: AppColors.accent,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (reminderService.isEnabled) ...[
+                          GestureDetector(
+                            onTap: _pickReminderTime,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                                vertical: 4.0,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceSubtle,
+                                borderRadius: BorderRadius.circular(8.0),
+                                border: Border.all(
+                                  color: AppColors.border,
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                reminderService.settings.formattedTime,
+                                style: const TextStyle(
+                                  fontSize: 12.0,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                        ],
+                        Switch.adaptive(
+                          value: reminderService.isEnabled,
+                          onChanged: _toggleReminder,
+                          activeThumbColor: AppColors.textPrimary,
+                          activeTrackColor: AppColors.surfaceSubtle,
+                        ),
+                      ],
                     ),
+                    onTap: reminderService.isEnabled ? _pickReminderTime : null,
                   ),
-                ),
-                onTap: _showStartOfWeekDialog,
-              ),
-              SettingsTile(
-                title: 'Theme & Palette',
-                subtitle: 'Warm Linen (Tailored)',
-                leadingIcon: Icons.palette_outlined,
-                leadingColor: AppColors.statIconBrown,
-                showChevron: true,
-                onTap: _showThemeInfoDialog,
-              ),
-            ],
+                  SettingsTile(
+                    title: 'Start of Week',
+                    subtitle: 'Calendar grid layout',
+                    leadingIcon: Icons.calendar_view_week_outlined,
+                    leadingColor: AppColors.statDaysGreen,
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10.0,
+                        vertical: 4.0,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(8.0),
+                        border: Border.all(color: AppColors.border, width: 0.8),
+                      ),
+                      child: Text(
+                        _startOfWeek,
+                        style: const TextStyle(
+                          fontSize: 12.0,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    onTap: _showStartOfWeekDialog,
+                  ),
+                  SettingsTile(
+                    title: 'Theme & Palette',
+                    subtitle: 'Warm Linen (Tailored)',
+                    leadingIcon: Icons.palette_outlined,
+                    leadingColor: AppColors.statIconBrown,
+                    showChevron: true,
+                    onTap: _showThemeInfoDialog,
+                  ),
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: AppSpacing.lg),

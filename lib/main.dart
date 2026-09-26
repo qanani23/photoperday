@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:photo_per_day/app.dart';
+import 'package:photo_per_day/core/routing/app_router.dart';
+import 'package:photo_per_day/data/services/daily_reminder_service.dart';
 import 'package:photo_per_day/data/services/google_auth_service.dart';
 import 'package:photo_per_day/data/services/google_drive_auth_service.dart';
 import 'package:photo_per_day/data/services/google_drive_service.dart';
@@ -13,5 +15,7 @@ void main() async {
   await GoogleDriveAuthService.instance.init();
   await GoogleDriveService.instance.init();
   await SyncCoordinator.instance.init();
+  DailyReminderService.instance.onNotificationTap = AppRouter.navigateToToday;
+  await DailyReminderService.instance.init();
   runApp(const PhotoPerDayApp());
 }
