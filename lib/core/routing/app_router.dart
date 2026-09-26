@@ -9,6 +9,7 @@ import 'package:photo_per_day/screens/diary/swipe_days_screen.dart';
 import 'package:photo_per_day/screens/diary/visual_diary_screen.dart';
 import 'package:photo_per_day/screens/main_shell.dart';
 import 'package:photo_per_day/screens/photo_detail/photo_detail_screen.dart';
+import 'package:photo_per_day/screens/statistics/statistics_screen.dart';
 
 /// Centralized application route definitions and generator.
 abstract final class AppRouter {
@@ -72,6 +73,17 @@ abstract final class AppRouter {
               }
             },
           ),
+          settings: settings,
+        );
+      case AppConstants.statisticsRoute:
+        DateKey? todayKey;
+        if (settings.arguments is DateKey) {
+          todayKey = settings.arguments as DateKey;
+        } else if (settings.arguments is DateTime) {
+          todayKey = DateKey.fromDateTime(settings.arguments as DateTime);
+        }
+        return MaterialPageRoute<void>(
+          builder: (_) => StatisticsScreen(todayKey: todayKey),
           settings: settings,
         );
       default:

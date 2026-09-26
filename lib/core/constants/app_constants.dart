@@ -9,4 +9,5 @@ abstract final class AppConstants {
   static const String diaryRoute = '/diary';
   static const String swipeDaysRoute = '/swipe-days';
   static const String memoriesRoute = '/memories';
+  static const String statisticsRoute = '/statistics';
 }

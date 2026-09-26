@@ -478,6 +478,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: () =>
                     Navigator.pushNamed(context, AppConstants.memoriesRoute),
               ),
+              SettingsTile(
+                title: 'Statistics',
+                subtitle: 'See your Photo a Day history',
+                leadingIcon: Icons.insights_rounded,
+                leadingColor: AppColors.statDaysGreen,
+                showChevron: true,
+                onTap: () =>
+                    Navigator.pushNamed(context, AppConstants.statisticsRoute),
+              ),
             ],
           ),
 
@@ -1670,75 +1679,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
       listenable: PersistentDailyPhotoStore.instance,
       builder: (context, _) {
         final summary = StreakService.instance.calculateStreak();
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: AppRadii.card,
-            border: Border.all(color: AppColors.border, width: 0.8),
-            boxShadow: AppShadows.card,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('PHOTO STREAK', style: AppTypography.appTagline),
-                  Icon(
-                    Icons.local_fire_department_rounded,
-                    size: 16.0,
-                    color: summary.currentStreak > 0
-                        ? AppColors.statStreakOrange
-                        : AppColors.textMuted,
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatItem(
-                      value: summary.currentStreak == 1
-                          ? '1 day'
-                          : '${summary.currentStreak} days',
-                      label: 'Current Streak',
-                      icon: Icons.local_fire_department_rounded,
+        return GestureDetector(
+          onTap: () =>
+              Navigator.pushNamed(context, AppConstants.statisticsRoute),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: AppRadii.card,
+              border: Border.all(color: AppColors.border, width: 0.8),
+              boxShadow: AppShadows.card,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('PHOTO STREAK', style: AppTypography.appTagline),
+                    Icon(
+                      Icons.local_fire_department_rounded,
+                      size: 16.0,
                       color: summary.currentStreak > 0
                           ? AppColors.statStreakOrange
                           : AppColors.textMuted,
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: _buildStatItem(
-                      value: summary.longestStreak == 1
-                          ? '1 day'
-                          : '${summary.longestStreak} days',
-                      label: 'Longest Streak',
-                      icon: Icons.trending_up_rounded,
-                      color: summary.longestStreak > 0
-                          ? AppColors.accent
-                          : AppColors.textMuted,
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatItem(
+                        value: summary.currentStreak == 1
+                            ? '1 day'
+                            : '${summary.currentStreak} days',
+                        label: 'Current Streak',
+                        icon: Icons.local_fire_department_rounded,
+                        color: summary.currentStreak > 0
+                            ? AppColors.statStreakOrange
+                            : AppColors.textMuted,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: _buildStatItem(
-                      value: summary.totalRecordedDays == 1
-                          ? '1 day'
-                          : '${summary.totalRecordedDays} days',
-                      label: 'Recorded Days',
-                      icon: Icons.calendar_today_outlined,
-                      color: summary.totalRecordedDays > 0
-                          ? AppColors.statDaysGreen
-                          : AppColors.textMuted,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: _buildStatItem(
+                        value: summary.longestStreak == 1
+                            ? '1 day'
+                            : '${summary.longestStreak} days',
+                        label: 'Longest Streak',
+                        icon: Icons.trending_up_rounded,
+                        color: summary.longestStreak > 0
+                            ? AppColors.accent
+                            : AppColors.textMuted,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: _buildStatItem(
+                        value: summary.totalRecordedDays == 1
+                            ? '1 day'
+                            : '${summary.totalRecordedDays} days',
+                        label: 'Recorded Days',
+                        icon: Icons.calendar_today_outlined,
+                        color: summary.totalRecordedDays > 0
+                            ? AppColors.statDaysGreen
+                            : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
