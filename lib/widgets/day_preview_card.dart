@@ -7,6 +7,8 @@ import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
 
+import 'package:photo_per_day/data/models/sync_presentation_model.dart';
+
 /// Interactive card displayed below the calendar showing details for the selected date.
 class DayPreviewCard extends StatelessWidget {
   const DayPreviewCard({
@@ -136,20 +138,22 @@ class DayPreviewCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    entry.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                  if (entry.title.trim().isNotEmpty)
+                    Text(
+                      entry.title.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                  if (entry.caption != null) ...[
+                  if (entry.caption != null &&
+                      entry.caption!.trim().isNotEmpty) ...[
                     const SizedBox(height: 2.0),
                     Text(
-                      entry.caption!,
+                      entry.caption!.trim(),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTypography.caption.copyWith(
@@ -159,7 +163,8 @@ class DayPreviewCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (entry.location != null) ...[
+                  if (entry.location != null &&
+                      entry.location!.trim().isNotEmpty) ...[
                     const SizedBox(height: 4.0),
                     Row(
                       children: [
@@ -171,7 +176,7 @@ class DayPreviewCard extends StatelessWidget {
                         const SizedBox(width: 2.0),
                         Flexible(
                           child: Text(
-                            entry.location!,
+                            entry.location!.trim(),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.caption.copyWith(
@@ -183,6 +188,8 @@ class DayPreviewCard extends StatelessWidget {
                       ],
                     ),
                   ],
+                  const SizedBox(height: 5.0),
+                  _buildSyncChip(entry),
                 ],
               ),
             ),
@@ -313,6 +320,38 @@ class DayPreviewCard extends StatelessWidget {
         ),
       ),
       child: Center(child: Icon(entry.icon, size: 24.0, color: Colors.white)),
+    );
+  }
+
+  Widget _buildSyncChip(PhotoEntry entry) {
+    final presentation = PhotoSyncPresentation.forEntry(entry);
+    return Semantics(
+      label: presentation.semanticLabel,
+      child: Tooltip(
+        message: presentation.detailLabel,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 2.0),
+          decoration: BoxDecoration(
+            color: presentation.color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(4.0),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(presentation.icon, size: 10.0, color: presentation.color),
+              const SizedBox(width: 3.0),
+              Text(
+                presentation.label,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w600,
+                  color: presentation.color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

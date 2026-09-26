@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:photo_per_day/core/constants/app_constants.dart';
 import 'package:photo_per_day/core/theme/app_colors.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
+import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
 import 'package:photo_per_day/data/services/daily_photo_rule.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/mock_photo_service.dart';
+import 'package:photo_per_day/data/services/sync_coordinator.dart';
+import 'package:photo_per_day/data/services/sync_worker.dart';
 import 'package:photo_per_day/screens/camera/camera_screen.dart';
 import 'package:photo_per_day/services/gallery_photo_service.dart';
 import 'package:photo_per_day/widgets/app_header.dart';
@@ -56,6 +59,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _displayedMonth = DateTime(_today.year, _today.month);
     _selectedDate = DateTime(2026, 3, 3); // Showcase photo preview initially
     PersistentDailyPhotoStore.instance.addListener(_onPhotoStoreUpdated);
+    SyncWorker.instance.addListener(_onPhotoStoreUpdated);
+    SyncCoordinator.instance.addListener(_onPhotoStoreUpdated);
   }
 
   void _onPhotoStoreUpdated() {
@@ -67,6 +72,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     PersistentDailyPhotoStore.instance.removeListener(_onPhotoStoreUpdated);
+    SyncWorker.instance.removeListener(_onPhotoStoreUpdated);
+    SyncCoordinator.instance.removeListener(_onPhotoStoreUpdated);
     super.dispose();
   }
 
@@ -171,7 +178,11 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Pinned App Header matching the reference design
-        AppHeader(onMeTap: widget.onNavigateToProfile),
+        AppHeader(
+          onDiaryTap: () =>
+              Navigator.pushNamed(context, AppConstants.diaryRoute),
+          onMeTap: widget.onNavigateToProfile,
+        ),
 
         Expanded(
           child: SingleChildScrollView(
@@ -300,6 +311,11 @@ class _HomeScreenState extends State<HomeScreen> {
         cellStyle = CalendarCellStyle.empty;
       }
 
+      final dateKey = DateKey.fromDateTime(date);
+      final isSyncing =
+          SyncWorker.instance.isSyncing &&
+          SyncWorker.instance.activeDateKey == dateKey;
+
       cells.add(
         CalendarCell(
           day: day,
@@ -312,6 +328,8 @@ class _HomeScreenState extends State<HomeScreen> {
           gradientColors: photo?.gradientColors,
           photoIcon: photo?.icon,
           isSelected: isSelected,
+          syncStatus: photo?.syncStatus,
+          isSyncing: isSyncing,
           onTap: () {
             setState(() {
               _selectedDate = date;

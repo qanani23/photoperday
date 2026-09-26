@@ -7,8 +7,11 @@ import 'package:photo_per_day/core/theme/app_shadows.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
+import 'package:photo_per_day/data/models/sync_presentation_model.dart';
 import 'package:photo_per_day/data/services/mock_photo_service.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
+import 'package:photo_per_day/data/services/sync_coordinator.dart';
+import 'package:photo_per_day/data/services/sync_worker.dart';
 import 'package:photo_per_day/screens/camera/camera_screen.dart';
 import 'package:photo_per_day/services/gallery_photo_service.dart';
 import 'package:photo_per_day/widgets/app_icon_button.dart';
@@ -49,6 +52,8 @@ class _TodayScreenState extends State<TodayScreen> {
       _hasPhoto = true;
     }
     PersistentDailyPhotoStore.instance.addListener(_onPhotoStoreUpdated);
+    SyncWorker.instance.addListener(_onPhotoStoreUpdated);
+    SyncCoordinator.instance.addListener(_onPhotoStoreUpdated);
   }
 
   void _onPhotoStoreUpdated() {
@@ -70,6 +75,8 @@ class _TodayScreenState extends State<TodayScreen> {
   @override
   void dispose() {
     PersistentDailyPhotoStore.instance.removeListener(_onPhotoStoreUpdated);
+    SyncWorker.instance.removeListener(_onPhotoStoreUpdated);
+    SyncCoordinator.instance.removeListener(_onPhotoStoreUpdated);
     super.dispose();
   }
 
@@ -388,6 +395,13 @@ class _TodayScreenState extends State<TodayScreen> {
                     ),
                   ),
 
+                  // Top-Right Backup Status Indicator
+                  Positioned(
+                    top: 14.0,
+                    right: 14.0,
+                    child: _buildSyncStatusBadge(_todayPhoto),
+                  ),
+
                   // Bottom Overlay Day & Timestamp
                   Positioned(
                     bottom: 14.0,
@@ -470,25 +484,28 @@ class _TodayScreenState extends State<TodayScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _todayPhoto.title,
-                style: const TextStyle(
-                  fontSize: 17.0,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+              if (_todayPhoto.title.trim().isNotEmpty)
+                Text(
+                  _todayPhoto.title.trim(),
+                  style: const TextStyle(
+                    fontSize: 17.0,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-              ),
-              if (_todayPhoto.caption != null) ...[
+              if (_todayPhoto.caption != null &&
+                  _todayPhoto.caption!.trim().isNotEmpty) ...[
                 const SizedBox(height: 4.0),
                 Text(
-                  _todayPhoto.caption!,
+                  _todayPhoto.caption!.trim(),
                   style: AppTypography.body.copyWith(
                     color: AppColors.textSecondary,
                     height: 1.35,
                   ),
                 ),
               ],
-              if (_todayPhoto.location != null) ...[
+              if (_todayPhoto.location != null &&
+                  _todayPhoto.location!.trim().isNotEmpty) ...[
                 const SizedBox(height: 8.0),
                 Row(
                   children: [
@@ -499,7 +516,7 @@ class _TodayScreenState extends State<TodayScreen> {
                     ),
                     const SizedBox(width: 3.0),
                     Text(
-                      _todayPhoto.location!,
+                      _todayPhoto.location!.trim(),
                       style: AppTypography.caption.copyWith(
                         color: AppColors.textMuted,
                         fontWeight: FontWeight.w500,
@@ -657,6 +674,53 @@ class _TodayScreenState extends State<TodayScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSyncStatusBadge(PhotoEntry photo) {
+    final presentation = PhotoSyncPresentation.forEntry(photo);
+    return Semantics(
+      label: presentation.semanticLabel,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9.0, vertical: 4.0),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (presentation.isBackingUp)
+              const SizedBox(
+                width: 10.0,
+                height: 10.0,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: Colors.white,
+                ),
+              )
+            else
+              Icon(
+                presentation.icon,
+                size: 11.5,
+                color: presentation.color == AppColors.error
+                    ? AppColors.error
+                    : (presentation.color == AppColors.statDaysGreen
+                          ? AppColors.statDaysGreen
+                          : Colors.white),
+              ),
+            const SizedBox(width: 4.0),
+            Text(
+              presentation.label,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

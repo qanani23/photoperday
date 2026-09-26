@@ -367,14 +367,18 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     required DateKey dateKey,
     String? title,
     String? caption,
+    bool clearCaption = false,
     String? location,
+    bool clearLocation = false,
   }) {
     return _runSequential(
       () => _updatePhotoMetadataInternal(
         dateKey: dateKey,
         title: title,
         caption: caption,
+        clearCaption: clearCaption,
         location: location,
+        clearLocation: clearLocation,
       ),
     );
   }
@@ -383,7 +387,9 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     required DateKey dateKey,
     String? title,
     String? caption,
+    bool clearCaption = false,
     String? location,
+    bool clearLocation = false,
   }) async {
     final existing = _entries[dateKey];
     if (existing == null) {
@@ -396,12 +402,30 @@ class PersistentDailyPhotoStore extends ChangeNotifier
       resolvedStatus = SyncStatus.pending;
     }
 
+    final bool shouldClearCaption =
+        clearCaption || (caption != null && caption.trim().isEmpty);
+    final String? resolvedCaption = shouldClearCaption
+        ? null
+        : (caption != null && caption.trim().isNotEmpty
+              ? caption.trim()
+              : existing.caption);
+
+    final bool shouldClearLocation =
+        clearLocation || (location != null && location.trim().isEmpty);
+    final String? resolvedLocation = shouldClearLocation
+        ? null
+        : (location != null && location.trim().isNotEmpty
+              ? location.trim()
+              : existing.location);
+
     final updated = existing.copyWith(
       title: (title != null && title.trim().isNotEmpty)
           ? title.trim()
           : existing.title,
-      caption: caption,
-      location: location,
+      caption: resolvedCaption,
+      clearCaption: shouldClearCaption,
+      location: resolvedLocation,
+      clearLocation: shouldClearLocation,
       syncStatus: resolvedStatus,
       lastModifiedAt: DateTime.now().toUtc(),
       clearSyncError: true,

@@ -1,13 +1,17 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:photo_per_day/core/constants/app_constants.dart';
 import 'package:photo_per_day/core/theme/app_colors.dart';
 import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_shadows.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
+import 'package:photo_per_day/data/models/sync_presentation_model.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
+import 'package:photo_per_day/data/services/sync_coordinator.dart';
+import 'package:photo_per_day/data/services/sync_worker.dart';
 
 /// Dedicated Photo Detail Screen for viewing, editing, and managing a single photo memory.
 ///
@@ -49,6 +53,8 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
       text: _currentEntry.location ?? '',
     );
     PersistentDailyPhotoStore.instance.addListener(_onPhotoStoreUpdated);
+    SyncWorker.instance.addListener(_onPhotoStoreUpdated);
+    SyncCoordinator.instance.addListener(_onPhotoStoreUpdated);
   }
 
   void _onPhotoStoreUpdated() {
@@ -71,10 +77,19 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
   @override
   void dispose() {
     PersistentDailyPhotoStore.instance.removeListener(_onPhotoStoreUpdated);
+    SyncWorker.instance.removeListener(_onPhotoStoreUpdated);
+    SyncCoordinator.instance.removeListener(_onPhotoStoreUpdated);
     _titleController.dispose();
     _captionController.dispose();
     _locationController.dispose();
     super.dispose();
+  }
+
+  void _openSwipeDays() {
+    Navigator.of(context).pushNamed(
+      AppConstants.swipeDaysRoute,
+      arguments: _currentEntry.dateKey,
+    );
   }
 
   void _enterEditMode() {
@@ -86,8 +101,83 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     });
   }
 
-  void _cancelEditMode() {
+  /// Whether the user has modified any diary field since entering edit mode.
+  bool get _hasUnsavedChanges {
+    final currentTitle = _titleController.text.trim();
+    final currentCaption = _captionController.text.trim();
+    final currentLocation = _locationController.text.trim();
+
+    final originalTitle = _currentEntry.title.trim();
+    final originalCaption = (_currentEntry.caption ?? '').trim();
+    final originalLocation = (_currentEntry.location ?? '').trim();
+
+    return currentTitle != originalTitle ||
+        currentCaption != originalCaption ||
+        currentLocation != originalLocation;
+  }
+
+  /// Prompts the user before discarding unsaved edits.
+  Future<bool> _onWillPop() async {
+    if (!_isEditing || !_hasUnsavedChanges) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadii.dialogRadius,
+          side: BorderSide(color: AppColors.border, width: 0.8),
+        ),
+        title: const Text(
+          'Discard changes?',
+          style: TextStyle(
+            fontSize: 18.0,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'You have unsaved changes to this diary entry. Are you sure you want to discard them?',
+          style: AppTypography.body.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Keep Editing',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              'Discard',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return discard ?? false;
+  }
+
+  Future<void> _cancelEditMode() async {
+    if (_hasUnsavedChanges) {
+      final shouldDiscard = await _onWillPop();
+      if (!shouldDiscard) return;
+    }
     setState(() {
+      _titleController.text = _currentEntry.title;
+      _captionController.text = _currentEntry.caption ?? '';
+      _locationController.text = _currentEntry.location ?? '';
       _isEditing = false;
     });
   }
@@ -105,12 +195,13 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
       return;
     }
 
-    final updatedCaption = _captionController.text.trim().isEmpty
-        ? null
-        : _captionController.text.trim();
-    final updatedLocation = _locationController.text.trim().isEmpty
-        ? null
-        : _locationController.text.trim();
+    final rawCaption = _captionController.text.trim();
+    final updatedCaption = rawCaption.isEmpty ? null : rawCaption;
+    final clearCaption = rawCaption.isEmpty;
+
+    final rawLocation = _locationController.text.trim();
+    final updatedLocation = rawLocation.isEmpty ? null : rawLocation;
+    final clearLocation = rawLocation.isEmpty;
 
     try {
       final updated = await PersistentDailyPhotoStore.instance
@@ -118,7 +209,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
             dateKey: _currentEntry.dateKey,
             title: updatedTitle,
             caption: updatedCaption,
+            clearCaption: clearCaption,
             location: updatedLocation,
+            clearLocation: clearLocation,
           );
 
       if (mounted) {
@@ -140,7 +233,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
       final fallbackEntry = _currentEntry.copyWith(
         title: updatedTitle,
         caption: updatedCaption,
+        clearCaption: clearCaption,
         location: updatedLocation,
+        clearLocation: clearLocation,
       );
       PersistentDailyPhotoStore.instance.setPhoto(fallbackEntry);
 
@@ -260,55 +355,67 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-      ),
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: SafeArea(
-          child: Column(
-            children: [
-              // Minimal Detail Header
-              _buildHeader(),
+    return PopScope(
+      canPop: !_isEditing || !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldPop = await _onWillPop();
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop(result);
+        }
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          body: SafeArea(
+            child: Column(
+              children: [
+                // Minimal Detail Header
+                _buildHeader(),
 
-              // Scrollable Detail Content
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.pageHorizontal,
-                    AppSpacing.xs,
-                    AppSpacing.pageHorizontal,
-                    AppSpacing.xxl,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Hero Photo Container
-                      _buildHeroPhoto(),
+                // Scrollable Detail Content
+                Expanded(
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pageHorizontal,
+                      AppSpacing.xs,
+                      AppSpacing.pageHorizontal,
+                      AppSpacing.xxl,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Hero Photo Container
+                        _buildHeroPhoto(),
 
-                      const SizedBox(height: AppSpacing.md),
+                        const SizedBox(height: AppSpacing.md),
 
-                      // Information Card or Edit Form
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 250),
-                        child: _isEditing
-                            ? _buildEditForm()
-                            : _buildMetadataCard(),
-                      ),
+                        // Information Card or Edit Form
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: _isEditing
+                              ? _buildEditForm()
+                              : _buildMetadataCard(),
+                        ),
 
-                      const SizedBox(height: AppSpacing.lg),
+                        const SizedBox(height: AppSpacing.lg),
 
-                      // Action Buttons
-                      if (!_isEditing) _buildActionButtons(),
-                    ],
+                        // Action Buttons
+                        if (!_isEditing) _buildActionButtons(),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -333,7 +440,16 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
               message: 'Back',
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => Navigator.of(context).pop(),
+                onTap: () async {
+                  if (_isEditing && _hasUnsavedChanges) {
+                    final shouldPop = await _onWillPop();
+                    if (shouldPop && mounted) {
+                      Navigator.of(context).pop();
+                    }
+                  } else {
+                    Navigator.of(context).pop();
+                  }
+                },
                 child: Container(
                   width: 40.0,
                   height: 40.0,
@@ -409,29 +525,59 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
               ),
             )
           else
-            Semantics(
-              label: 'Edit memory details',
-              button: true,
-              child: Tooltip(
-                message: 'Edit',
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _enterEditMode,
-                  child: Container(
-                    width: 40.0,
-                    height: 40.0,
-                    decoration: const BoxDecoration(
-                      color: AppColors.surfaceSubtle,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.edit_outlined,
-                      size: 18.0,
-                      color: AppColors.textPrimary,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  label: 'Browse recorded days',
+                  button: true,
+                  child: Tooltip(
+                    message: 'Browse Days',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _openSwipeDays,
+                      child: Container(
+                        width: 40.0,
+                        height: 40.0,
+                        decoration: const BoxDecoration(
+                          color: AppColors.surfaceSubtle,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.view_carousel_rounded,
+                          size: 19.0,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
+                const SizedBox(width: AppSpacing.xs),
+                Semantics(
+                  label: 'Edit memory details',
+                  button: true,
+                  child: Tooltip(
+                    message: 'Edit',
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _enterEditMode,
+                      child: Container(
+                        width: 40.0,
+                        height: 40.0,
+                        decoration: const BoxDecoration(
+                          color: AppColors.surfaceSubtle,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.edit_outlined,
+                          size: 18.0,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
         ],
       ),
@@ -577,8 +723,17 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     );
   }
 
-  /// Normal Mode: Rich Metadata Display Card
+  /// Normal Mode: Rich Diary Metadata Display Card
   Widget _buildMetadataCard() {
+    final hasTitle = _currentEntry.title.trim().isNotEmpty;
+    final hasCaption =
+        _currentEntry.caption != null &&
+        _currentEntry.caption!.trim().isNotEmpty;
+    final hasLocation =
+        _currentEntry.location != null &&
+        _currentEntry.location!.trim().isNotEmpty;
+    final hasTime = _currentEntry.timeFormatted.trim().isNotEmpty;
+
     return Container(
       key: const ValueKey('metadata_card'),
       width: double.infinity,
@@ -592,28 +747,100 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title
-          Text(
-            _currentEntry.title,
-            style: const TextStyle(
-              fontSize: 20.0,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-              letterSpacing: -0.3,
-            ),
+          // Diary Date & Time Header Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_today_rounded,
+                    size: 13.0,
+                    color: AppColors.accent,
+                  ),
+                  const SizedBox(width: 5.0),
+                  Text(
+                    _formatDate(_currentEntry.date),
+                    style: const TextStyle(
+                      fontSize: 12.0,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              if (hasTime)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.access_time_rounded,
+                      size: 12.0,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 4.0),
+                    Text(
+                      _currentEntry.timeFormatted,
+                      style: AppTypography.caption.copyWith(
+                        fontSize: 11.5,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
           ),
 
-          // Caption
-          if (_currentEntry.caption != null &&
-              _currentEntry.caption!.isNotEmpty) ...[
-            const SizedBox(height: 8.0),
+          // Title Section (omitted if empty)
+          if (hasTitle) ...[
+            const SizedBox(height: AppSpacing.sm),
             Text(
-              _currentEntry.caption!,
+              _currentEntry.title.trim(),
+              style: const TextStyle(
+                fontSize: 20.0,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.3,
+                height: 1.25,
+              ),
+            ),
+          ],
+
+          // Caption Section (omitted if empty)
+          if (hasCaption) ...[
+            const SizedBox(height: 10.0),
+            Text(
+              _currentEntry.caption!.trim(),
               style: AppTypography.body.copyWith(
-                color: AppColors.textSecondary,
-                height: 1.45,
+                color: AppColors.textPrimary.withValues(alpha: 0.85),
+                height: 1.5,
                 fontSize: 14.0,
               ),
+            ),
+          ],
+
+          // Location Byline (omitted if empty)
+          if (hasLocation) ...[
+            const SizedBox(height: 12.0),
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 14.0,
+                  color: AppColors.accent,
+                ),
+                const SizedBox(width: 4.0),
+                Expanded(
+                  child: Text(
+                    _currentEntry.location!.trim(),
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.0,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
 
@@ -621,65 +848,161 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
           const Divider(height: 1.0, color: AppColors.borderSubtle),
           const SizedBox(height: AppSpacing.md),
 
-          // Metadata Chips Grid / List
-          Wrap(
-            spacing: 12.0,
-            runSpacing: 10.0,
-            children: [
-              if (_currentEntry.location != null &&
-                  _currentEntry.location!.isNotEmpty)
-                _buildMetaChip(
-                  icon: Icons.location_on_outlined,
-                  label: _currentEntry.location!,
-                  iconColor: AppColors.accent,
-                ),
-              _buildMetaChip(
-                icon: Icons.calendar_today_outlined,
-                label: _formatShortDate(_currentEntry.date),
-              ),
-              _buildMetaChip(
-                icon: Icons.access_time_rounded,
-                label: _currentEntry.timeFormatted,
-              ),
-              _buildMetaChip(
-                icon: Icons.category_outlined,
-                label: _currentEntry.category,
-              ),
-            ],
-          ),
+          // Cloud Backup Status Section
+          _buildSyncStatusSection(),
         ],
       ),
     );
   }
 
-  Widget _buildMetaChip({
-    required IconData icon,
-    required String label,
-    Color iconColor = AppColors.textMuted,
-  }) {
+  /// Cloud Backup Status presentation section
+  Widget _buildSyncStatusSection() {
+    final presentation = PhotoSyncPresentation.forEntry(_currentEntry);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 5.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
       decoration: BoxDecoration(
         color: AppColors.surfaceSubtle,
-        borderRadius: BorderRadius.circular(10.0),
-        border: Border.all(color: AppColors.border, width: 0.8),
+        borderRadius: BorderRadius.circular(12.0),
+        border: Border.all(
+          color: presentation.isFailed
+              ? AppColors.error.withValues(alpha: 0.35)
+              : AppColors.border,
+          width: 0.8,
+        ),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13.0, color: iconColor),
-          const SizedBox(width: 5.0),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12.0,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+          if (presentation.isBackingUp)
+            const SizedBox(
+              width: 16.0,
+              height: 16.0,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.0,
+                color: AppColors.accent,
+              ),
+            )
+          else
+            Icon(presentation.icon, size: 18.0, color: presentation.color),
+          const SizedBox(width: 10.0),
+          Expanded(
+            child: Semantics(
+              label: presentation.semanticLabel,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    presentation.detailLabel,
+                    style: TextStyle(
+                      fontSize: 13.0,
+                      fontWeight: FontWeight.w600,
+                      color: presentation.isFailed
+                          ? AppColors.error
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  if (presentation.isFailed)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2.0),
+                      child: Text(
+                        'Tap Try Again to retry backup',
+                        style: TextStyle(
+                          fontSize: 11.0,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
+          if (presentation.isFailed)
+            Semantics(
+              label: 'Try photo backup again',
+              button: true,
+              child: OutlinedButton(
+                onPressed: _handleTryAgain,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.accent,
+                  side: const BorderSide(color: AppColors.accent),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12.0,
+                    vertical: 6.0,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                ),
+                child: const Text(
+                  'Try Again',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _handleTryAgain() async {
+    final coordinator = SyncCoordinator.instance;
+    if (coordinator.isSyncing) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sync is already in progress.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Retrying backup to Google Drive...'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    final result = await coordinator.requestSync(trigger: SyncTrigger.manual);
+    if (!mounted) return;
+
+    if (result.alreadyRunning) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sync is already in progress.'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else if (result.failedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Backup retry failed. Please check connection or Drive settings.',
+          ),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.error,
+        ),
+      );
+    } else if (result.succeededCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Photo backed up successfully!'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   /// Edit Mode Form
@@ -697,42 +1020,64 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'EDIT DETAILS',
-            style: TextStyle(
-              fontSize: 11.0,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textMuted,
-              letterSpacing: 0.8,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'DIARY ENTRY',
+                style: TextStyle(
+                  fontSize: 11.0,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              Text(
+                _formatShortDate(_currentEntry.date),
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.sm),
 
-          // Title Input
+          // Title Input with character limit (max 80)
           _buildFormField(
             label: 'Title',
             controller: _titleController,
             hintText: 'Enter photo title',
+            maxLength: 80,
+            textInputAction: TextInputAction.next,
           ),
 
           const SizedBox(height: AppSpacing.md),
 
-          // Caption Input
+          // Caption Input with character limit (max 1000)
           _buildFormField(
             label: 'Caption / Note',
             controller: _captionController,
             hintText: 'Write a memory or reflection...',
-            maxLines: 3,
+            minLines: 3,
+            maxLines: 6,
+            maxLength: 1000,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
           ),
 
           const SizedBox(height: AppSpacing.md),
 
-          // Location Input
+          // Location Input with character limit (max 100)
           _buildFormField(
             label: 'Location',
             controller: _locationController,
             hintText: 'e.g. Echo Park Lake',
             prefixIcon: Icons.location_on_outlined,
+            maxLength: 100,
+            textInputAction: TextInputAction.done,
+            keyboardType: TextInputType.streetAddress,
           ),
 
           const SizedBox(height: AppSpacing.lg),
@@ -741,36 +1086,44 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _saveChanges,
-                  icon: const Icon(Icons.check_rounded, size: 16.0),
-                  label: const Text('Save Changes'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.textPrimary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 12.0),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16.0),
+                child: Semantics(
+                  button: true,
+                  label: 'Save memory changes',
+                  child: ElevatedButton.icon(
+                    onPressed: _saveChanges,
+                    icon: const Icon(Icons.check_rounded, size: 16.0),
+                    label: const Text('Save Changes'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.textPrimary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12.0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16.0),
+                      ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              OutlinedButton(
-                onPressed: _cancelEditMode,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12.0,
-                    horizontal: 16.0,
+              Semantics(
+                button: true,
+                label: 'Cancel editing',
+                child: OutlinedButton(
+                  onPressed: _cancelEditMode,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12.0,
+                      horizontal: 16.0,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16.0),
-                  ),
+                  child: const Text('Cancel'),
                 ),
-                child: const Text('Cancel'),
               ),
             ],
           ),
@@ -783,24 +1136,61 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
     required String label,
     required TextEditingController controller,
     required String hintText,
+    int minLines = 1,
     int maxLines = 1,
+    int? maxLength,
     IconData? prefixIcon,
+    TextInputAction? textInputAction,
+    TextInputType? keyboardType,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            if (maxLength != null)
+              AnimatedBuilder(
+                animation: controller,
+                builder: (context, _) {
+                  final currentLength = controller.text.length;
+                  return Text(
+                    '$currentLength/$maxLength',
+                    style: TextStyle(
+                      fontSize: 11.0,
+                      color: currentLength > maxLength
+                          ? AppColors.error
+                          : AppColors.textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  );
+                },
+              ),
+          ],
         ),
         const SizedBox(height: 6.0),
         TextFormField(
           controller: controller,
+          minLines: minLines,
           maxLines: maxLines,
+          maxLength: maxLength,
+          buildCounter:
+              (
+                context, {
+                required currentLength,
+                required isFocused,
+                maxLength,
+              }) => null,
+          keyboardType: keyboardType,
+          textInputAction: textInputAction,
           style: const TextStyle(
             fontSize: 14.0,
             color: AppColors.textPrimary,
@@ -846,6 +1236,23 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
   Widget _buildActionButtons() {
     return Column(
       children: [
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _openSwipeDays,
+            icon: const Icon(Icons.view_carousel_rounded, size: 16.0),
+            label: const Text('Browse Days'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textPrimary,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(vertical: 12.0),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.0),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
         Row(
           children: [
             Expanded(

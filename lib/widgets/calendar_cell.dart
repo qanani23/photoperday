@@ -3,6 +3,8 @@ import 'package:photo_per_day/core/theme/app_colors.dart';
 import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 
+import 'package:photo_per_day/data/models/sync_status.dart';
+
 /// Distinct visual states of a calendar date cell.
 enum CalendarCellStyle {
   /// Date with an attached photo
@@ -30,6 +32,8 @@ class CalendarCell extends StatelessWidget {
     this.isSelected = false,
     this.isCurrentMonth = true,
     this.photoIcon,
+    this.syncStatus,
+    this.isSyncing = false,
     this.onTap,
   });
 
@@ -57,6 +61,12 @@ class CalendarCell extends StatelessWidget {
   /// Optional scene icon
   final IconData? photoIcon;
 
+  /// Synchronization status for days with photos
+  final SyncStatus? syncStatus;
+
+  /// Whether synchronization is currently in progress for this photo
+  final bool isSyncing;
+
   /// Tap callback
   final VoidCallback? onTap;
 
@@ -66,8 +76,17 @@ class CalendarCell extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final syncDescription = switch (syncStatus) {
+      SyncStatus.synced => ', Backed up',
+      SyncStatus.pending => ', Waiting to back up',
+      SyncStatus.failed => ', Backup failed',
+      SyncStatus.localOnly => ', On this device',
+      null => '',
+    };
+
     final semanticLabel = switch (style) {
-      CalendarCellStyle.photo => 'Day $day, Photo memory captured',
+      CalendarCellStyle.photo =>
+        'Day $day, Photo memory captured$syncDescription',
       CalendarCellStyle.today => 'Day $day, Today',
       CalendarCellStyle.empty => 'Day $day',
       CalendarCellStyle.blank => '',
@@ -172,6 +191,60 @@ class CalendarCell extends StatelessWidget {
 
               // Day number
               Center(child: Text('$day', style: AppTypography.cellNumberPhoto)),
+
+              // Subtle sync status indicator in top-right
+              if (isSyncing)
+                Positioned(
+                  top: 4.5,
+                  right: 4.5,
+                  child: Container(
+                    width: 5.5,
+                    height: 5.5,
+                    decoration: const BoxDecoration(
+                      color: AppColors.accent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                )
+              else if (syncStatus == SyncStatus.failed)
+                Positioned(
+                  top: 4.5,
+                  right: 4.5,
+                  child: Container(
+                    width: 5.5,
+                    height: 5.5,
+                    decoration: const BoxDecoration(
+                      color: AppColors.error,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                )
+              else if (syncStatus == SyncStatus.pending)
+                Positioned(
+                  top: 4.5,
+                  right: 4.5,
+                  child: Container(
+                    width: 5.5,
+                    height: 5.5,
+                    decoration: const BoxDecoration(
+                      color: AppColors.accent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                )
+              else if (syncStatus == SyncStatus.synced)
+                Positioned(
+                  top: 4.5,
+                  right: 4.5,
+                  child: Container(
+                    width: 4.5,
+                    height: 4.5,
+                    decoration: BoxDecoration(
+                      color: AppColors.statDaysGreen.withValues(alpha: 0.9),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
             ],
           ),
         );

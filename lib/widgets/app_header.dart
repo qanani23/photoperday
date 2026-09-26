@@ -11,9 +11,15 @@ import 'package:photo_per_day/widgets/app_icon_button.dart';
 /// Contains the app squircle logo badge, "Photo a Day" title, uppercase tagline,
 /// and the "Explore >" and "Me" circular action buttons.
 class AppHeader extends StatelessWidget {
-  const AppHeader({super.key, this.onExploreTap, this.onMeTap});
+  const AppHeader({
+    super.key,
+    this.onExploreTap,
+    this.onDiaryTap,
+    this.onMeTap,
+  });
 
   final VoidCallback? onExploreTap;
+  final VoidCallback? onDiaryTap;
   final VoidCallback? onMeTap;
 
   @override
@@ -80,19 +86,21 @@ class AppHeader extends StatelessWidget {
             ),
           ),
 
-          // Action Buttons (Explore & Me)
+          // Action Buttons (Diary & Me)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               AppHeaderAction(
-                icon: Icons.search_rounded,
-                label: 'Explore >',
-                onTap: onExploreTap,
+                icon: Icons.auto_stories_rounded,
+                label: 'Diary >',
+                tooltip: 'Visual Diary',
+                onTap: onDiaryTap ?? onExploreTap,
               ),
               const SizedBox(width: AppSpacing.xs),
               AppHeaderAction(
                 icon: Icons.more_horiz_rounded,
                 label: 'Me',
+                tooltip: 'Profile & Settings',
                 onTap: onMeTap,
               ),
             ],

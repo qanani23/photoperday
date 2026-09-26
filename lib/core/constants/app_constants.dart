@@ -6,4 +6,6 @@ abstract final class AppConstants {
   // Route Names
   static const String initialRoute = '/';
   static const String photoDetailRoute = '/photo-detail';
+  static const String diaryRoute = '/diary';
+  static const String swipeDaysRoute = '/swipe-days';
 }
