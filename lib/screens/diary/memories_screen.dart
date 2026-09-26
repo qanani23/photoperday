@@ -295,8 +295,9 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
       entry.date,
       _effectiveTargetDate,
     );
-    final relativeYearLabel =
-        yearsAgo == 1 ? '1 year ago' : '$yearsAgo years ago';
+    final relativeYearLabel = yearsAgo == 1
+        ? '1 year ago'
+        : '$yearsAgo years ago';
 
     final months = [
       'Jan',

@@ -210,10 +210,9 @@ class _TodayScreenState extends State<TodayScreen> {
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadii.md),
           onTap: () {
-            Navigator.of(context).pushNamed(
-              AppConstants.memoriesRoute,
-              arguments: today,
-            );
+            Navigator.of(
+              context,
+            ).pushNamed(AppConstants.memoriesRoute, arguments: today);
           },
           child: Container(
             padding: const EdgeInsets.symmetric(

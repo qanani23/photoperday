@@ -73,6 +73,8 @@ class WidgetMemoriesTestFakePhotoFileManager extends PhotoFileManager {
 }
 
 class WidgetMemoriesTestFakeSyncQueueStorage extends SyncQueueStorage {
+  WidgetMemoriesTestFakeSyncQueueStorage({super.customBaseDir});
+
   final List<SyncOperation> _ops = [];
 
   @override
@@ -109,7 +111,9 @@ void main() {
     fileManager = WidgetMemoriesTestFakePhotoFileManager(
       customBaseDir: tempDir,
     );
-    queueStorage = WidgetMemoriesTestFakeSyncQueueStorage();
+    queueStorage = WidgetMemoriesTestFakeSyncQueueStorage(
+      customBaseDir: tempDir,
+    );
     syncQueue = SyncQueue(storage: queueStorage);
     await syncQueue.init();
 
@@ -155,10 +159,7 @@ void main() {
     return entry;
   }
 
-  Widget createTestWidget({
-    DateTime? targetDate,
-    VoidCallback? onCaptureTap,
-  }) {
+  Widget createTestWidget({DateTime? targetDate, VoidCallback? onCaptureTap}) {
     return MaterialApp(
       initialRoute: AppConstants.memoriesRoute,
       onGenerateRoute: (settings) {
@@ -288,9 +289,7 @@ void main() {
       expect(find.text('3 memories'), findsOneWidget);
     });
 
-    testWidgets('5. Correct newest-to-oldest memory ordering', (
-      tester,
-    ) async {
+    testWidgets('5. Correct newest-to-oldest memory ordering', (tester) async {
       final targetDate = DateTime(2026, 3, 28);
 
       final memories = MemoryService.instance.getMemoriesForDate(
@@ -510,35 +509,36 @@ void main() {
       expect(find.byIcon(Icons.photo_camera_rounded), findsOneWidget);
     });
 
-    testWidgets('13. Deleting a memory source removes it from the memory list', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+    testWidgets(
+      '13. Deleting a memory source removes it from the memory list',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      final targetDate = DateTime(2026, 3, 28);
-      await addSamplePhoto(
-        dateKey: const DateKey(2025, 3, 28),
-        title: 'Memory To Delete',
-      );
+        final targetDate = DateTime(2026, 3, 28);
+        await addSamplePhoto(
+          dateKey: const DateKey(2025, 3, 28),
+          title: 'Memory To Delete',
+        );
 
-      await tester.pumpWidget(createTestWidget(targetDate: targetDate));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(createTestWidget(targetDate: targetDate));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Memory To Delete'), findsOneWidget);
+        expect(find.text('Memory To Delete'), findsOneWidget);
 
-      // Delete from store
-      photoStore.removePhoto(const DateKey(2025, 3, 28).toDateTime());
-      await tester.pumpAndSettle();
+        // Delete from store
+        photoStore.removePhoto(const DateKey(2025, 3, 28).toDateTime());
+        await tester.pumpAndSettle();
 
-      // Disappears dynamically, rendering empty state
-      expect(find.text('Memory To Delete'), findsNothing);
-      expect(find.text('No memories from this day yet'), findsOneWidget);
-    });
+        // Disappears dynamically, rendering empty state
+        expect(find.text('Memory To Delete'), findsNothing);
+        expect(find.text('No memories from this day yet'), findsOneWidget);
+      },
+    );
 
     testWidgets('14. Replacing a memory source updates its displayed photo', (
       tester,
@@ -594,8 +594,8 @@ void main() {
       await tester.pumpWidget(createTestWidget(targetDate: targetDate));
       await tester.pumpAndSettle();
 
-      // Synced chip renders
-      expect(find.text('Synced'), findsOneWidget);
+      // Backed up chip renders
+      expect(find.text('Backed up'), findsOneWidget);
     });
 
     testWidgets('16. No mock photos appear', (tester) async {
