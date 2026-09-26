@@ -321,7 +321,10 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
           ),
           // Position Pill Badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 4.5),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10.0,
+              vertical: 4.5,
+            ),
             decoration: BoxDecoration(
               color: AppColors.surfaceSubtle,
               borderRadius: BorderRadius.circular(12.0),
@@ -392,16 +395,15 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
                         label: 'Photo captured on $formattedDate',
                         child:
                             (entry.hasRealImage && entry.isImageFileAvailable)
-                                ? Image.file(
-                                    File(entry.imagePath!),
-                                    cacheWidth: 1080,
-                                    cacheHeight: 1080,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            _buildFallbackPhoto(entry),
-                                  )
-                                : _buildFallbackPhoto(entry),
+                            ? Image.file(
+                                File(entry.imagePath!),
+                                cacheWidth: 1080,
+                                cacheHeight: 1080,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    _buildFallbackPhoto(entry),
+                              )
+                            : _buildFallbackPhoto(entry),
                       ),
                     ),
                   ),
@@ -517,11 +519,9 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
         horizontal: AppSpacing.pageHorizontal,
         vertical: AppSpacing.sm,
       ),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: AppColors.surface,
-        border: Border(
-          top: BorderSide(color: AppColors.border, width: 0.8),
-        ),
+        border: Border(top: BorderSide(color: AppColors.border, width: 0.8)),
       ),
       child: Center(
         child: ConstrainedBox(
@@ -536,11 +536,16 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
                 enabled: canGoPrevious,
                 child: TextButton.icon(
                   onPressed: canGoPrevious ? _goToPrevious : null,
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14.0),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 14.0,
+                  ),
                   label: const Text('Older'),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.textPrimary,
-                    disabledForegroundColor: AppColors.textMuted.withValues(alpha: 0.4),
+                    disabledForegroundColor: AppColors.textMuted.withValues(
+                      alpha: 0.4,
+                    ),
                   ),
                 ),
               ),
@@ -574,7 +579,9 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
                   icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14.0),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.textPrimary,
-                    disabledForegroundColor: AppColors.textMuted.withValues(alpha: 0.4),
+                    disabledForegroundColor: AppColors.textMuted.withValues(
+                      alpha: 0.4,
+                    ),
                   ),
                 ),
               ),

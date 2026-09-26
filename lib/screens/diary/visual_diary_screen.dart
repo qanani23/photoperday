@@ -83,10 +83,9 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
   }
 
   void _openSwipeDays(PhotoEntry entry) {
-    Navigator.of(context).pushNamed(
-      AppConstants.swipeDaysRoute,
-      arguments: entry.dateKey,
-    );
+    Navigator.of(
+      context,
+    ).pushNamed(AppConstants.swipeDaysRoute, arguments: entry.dateKey);
   }
 
   Future<void> _promptPhotoCapture() async {

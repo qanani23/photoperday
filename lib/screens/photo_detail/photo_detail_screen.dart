@@ -86,10 +86,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
   }
 
   void _openSwipeDays() {
-    Navigator.of(context).pushNamed(
-      AppConstants.swipeDaysRoute,
-      arguments: _currentEntry.dateKey,
-    );
+    Navigator.of(
+      context,
+    ).pushNamed(AppConstants.swipeDaysRoute, arguments: _currentEntry.dateKey);
   }
 
   void _enterEditMode() {
