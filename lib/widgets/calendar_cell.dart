@@ -31,6 +31,7 @@ class CalendarCell extends StatelessWidget {
     this.gradientColors,
     this.isSelected = false,
     this.isCurrentMonth = true,
+    this.isToday = false,
     this.photoIcon,
     this.syncStatus,
     this.isSyncing = false,
@@ -58,6 +59,9 @@ class CalendarCell extends StatelessWidget {
   /// Whether this date belongs to the displayed month
   final bool isCurrentMonth;
 
+  /// Whether this date represents the current calendar day ("today")
+  final bool isToday;
+
   /// Optional scene icon
   final IconData? photoIcon;
 
@@ -84,11 +88,14 @@ class CalendarCell extends StatelessWidget {
       null => '',
     };
 
+    final effectiveIsToday = isToday || style == CalendarCellStyle.today;
+    final todayPart = effectiveIsToday ? 'Today, ' : '';
+
     final semanticLabel = switch (style) {
       CalendarCellStyle.photo =>
-        'Day $day, Photo memory captured$syncDescription',
-      CalendarCellStyle.today => 'Day $day, Today',
-      CalendarCellStyle.empty => 'Day $day',
+        'Day $day, ${todayPart}Photo memory captured$syncDescription',
+      CalendarCellStyle.today => 'Day $day, Today, No photo',
+      CalendarCellStyle.empty => 'Day $day, ${todayPart}No photo',
       CalendarCellStyle.blank => '',
     };
 
@@ -190,7 +197,12 @@ class CalendarCell extends StatelessWidget {
               ),
 
               // Day number
-              Center(child: Text('$day', style: AppTypography.cellNumberPhoto)),
+              Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('$day', style: AppTypography.cellNumberPhoto),
+                ),
+              ),
 
               // Subtle sync status indicator in top-right
               if (isSyncing)
@@ -264,7 +276,10 @@ class CalendarCell extends StatelessWidget {
                 border: Border.all(color: AppColors.accent, width: 1.6),
               ),
               alignment: Alignment.center,
-              child: Text('$day', style: AppTypography.cellNumberToday),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('$day', style: AppTypography.cellNumberToday),
+              ),
             ),
           ),
         );
@@ -277,13 +292,16 @@ class CalendarCell extends StatelessWidget {
             borderRadius: AppRadii.cell,
           ),
           alignment: Alignment.center,
-          child: Text(
-            '$day',
-            style: isCurrentMonth
-                ? AppTypography.cellNumberEmpty
-                : AppTypography.cellNumberEmpty.copyWith(
-                    color: AppColors.textMutedSubtle,
-                  ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '$day',
+              style: isCurrentMonth
+                  ? AppTypography.cellNumberEmpty
+                  : AppTypography.cellNumberEmpty.copyWith(
+                      color: AppColors.textMutedSubtle,
+                    ),
+            ),
           ),
         );
     }

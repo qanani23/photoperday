@@ -108,20 +108,25 @@ class PhotoSourceSheet extends StatelessWidget {
           // Cancel Action
           SizedBox(
             width: double.infinity,
-            child: TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12.0),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14.0),
+            child: Semantics(
+              button: true,
+              label: 'Cancel photo selection',
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                  minimumSize: const Size(double.infinity, 48.0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14.0),
+                  ),
                 ),
-              ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textMuted,
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ),
             ),
@@ -143,67 +148,71 @@ class PhotoSourceSheet extends StatelessWidget {
     return Material(
       color: AppColors.surfaceSubtle,
       borderRadius: AppRadii.card,
-      child: InkWell(
-        onTap: () => Navigator.of(context).pop(source),
-        borderRadius: AppRadii.card,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: 14.0,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: AppRadii.card,
-            border: Border.all(color: AppColors.border, width: 0.8),
-          ),
-          child: Row(
-            children: [
-              // Icon Badge
-              Container(
-                width: 44.0,
-                height: 44.0,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.border, width: 0.8),
+      child: Semantics(
+        button: true,
+        label: '$title. $subtitle.',
+        child: InkWell(
+          onTap: () => Navigator.of(context).pop(source),
+          borderRadius: AppRadii.card,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: 14.0,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: AppRadii.card,
+              border: Border.all(color: AppColors.border, width: 0.8),
+            ),
+            child: Row(
+              children: [
+                // Icon Badge
+                Container(
+                  width: 44.0,
+                  height: 44.0,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.border, width: 0.8),
+                  ),
+                  child: Icon(icon, size: 20.0, color: iconColor),
                 ),
-                child: Icon(icon, size: 20.0, color: iconColor),
-              ),
 
-              const SizedBox(width: AppSpacing.md),
+                const SizedBox(width: AppSpacing.md),
 
-              // Title and Subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 15.0,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.2,
+                // Title and Subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15.0,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.2,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 1.5),
-                    Text(
-                      subtitle,
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 12.0,
+                      const SizedBox(height: 1.5),
+                      Text(
+                        subtitle,
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 12.0,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
 
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 20.0,
-                color: AppColors.textMuted,
-              ),
-            ],
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20.0,
+                  color: AppColors.textMuted,
+                ),
+              ],
+            ),
           ),
         ),
       ),

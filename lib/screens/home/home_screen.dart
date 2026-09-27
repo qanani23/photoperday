@@ -320,6 +320,7 @@ class _HomeScreenState extends State<HomeScreen> {
         CalendarCell(
           day: day,
           style: cellStyle,
+          isToday: isToday,
           imageProvider:
               (photo?.hasRealImage == true &&
                   photo?.isImageFileAvailable == true)

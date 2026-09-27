@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:photo_per_day/core/constants/app_constants.dart';
 import 'package:photo_per_day/core/theme/app_colors.dart';
@@ -106,7 +107,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   bool get _isDeveloperToolsEnabled =>
-      widget.showDeveloperTools || ProfileScreen.enableDeveloperTools;
+      !kReleaseMode &&
+      (widget.showDeveloperTools || ProfileScreen.enableDeveloperTools);
 
   Future<void> _handleSignOut() async {
     final queue = PersistentDailyPhotoStore.instance.syncQueue;
@@ -611,23 +613,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
           vertical: 10.0,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
+          Semantics(
+            button: true,
+            label: 'Cancel local diary deletion',
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(minimumSize: const Size(48.0, 48.0)),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Delete Local Diary',
-              style: TextStyle(
-                color: AppColors.error,
-                fontWeight: FontWeight.w700,
+          Semantics(
+            button: true,
+            label: 'Confirm deleting local diary',
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(minimumSize: const Size(48.0, 48.0)),
+              child: const Text(
+                'Delete Local Diary',
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
@@ -713,23 +725,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
           vertical: 10.0,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
+          Semantics(
+            button: true,
+            label: 'Cancel cloud backup deletion',
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(minimumSize: const Size(48.0, 48.0)),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Delete Cloud Backup',
-              style: TextStyle(
-                color: AppColors.error,
-                fontWeight: FontWeight.w700,
+          Semantics(
+            button: true,
+            label: 'Confirm deleting cloud backup',
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(minimumSize: const Size(48.0, 48.0)),
+              child: const Text(
+                'Delete Cloud Backup',
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
@@ -806,23 +828,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
           vertical: 10.0,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
+          Semantics(
+            button: true,
+            label: 'Cancel deleting local and cloud data',
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(minimumSize: const Size(48.0, 48.0)),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Delete Everything',
-              style: TextStyle(
-                color: AppColors.error,
-                fontWeight: FontWeight.w700,
+          Semantics(
+            button: true,
+            label: 'Confirm deleting everything both locally and in the cloud',
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(minimumSize: const Size(48.0, 48.0)),
+              child: const Text(
+                'Delete Everything',
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
@@ -1008,10 +1040,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (drive.isReady) {
       final folder = drive.currentFolder;
       content =
-          'Google Drive "Photo a Day" folder is ready!\n\n'
+          'Google Drive "Photo a Day" backup is active.\n\n'
           'Folder: ${folder?.folderName ?? "Photo a Day"}\n'
           'Account: ${folder?.authorizedEmail ?? "Connected Google Account"}\n\n'
-          'Your dedicated folder has been resolved in your Google Drive. In upcoming milestones, photos will sync here. No photos have been uploaded yet.';
+          'Your dedicated folder has been resolved in your Google Drive. '
+          'Photos remain stored locally on your device first, and your cloud backup remains under your Google account ownership. '
+          'No photos have been uploaded yet until sync runs.';
     } else if (driveAuth.isAuthorized) {
       content =
           'Google Drive authorization is granted!\n\n'
@@ -1041,7 +1075,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _showInfoDialog(
       title: 'Privacy Policy',
       content:
-          'Your memories belong entirely to you.\n\nAll photos are stored locally on your device. Photo a Day does not track your location, sell personal data, or upload your memories to third-party advertising servers.',
+          'Your memories belong entirely to you.\n\n'
+          '• Local-First: All photos and diary entries are stored locally on your device.\n'
+          '• Optional Cloud Backup: Google Drive backup is entirely optional and uses only the limited "drive.file" permission for the app\'s dedicated folder.\n'
+          '• No Custom Backend: The app operates without a custom server or third-party database. We never see, store, or transmit your photos to any external servers.\n'
+          '• Full Data Control: You can export your entire diary at any time or delete your local and cloud data independently.\n'
+          '• No Tracking: Photo a Day contains zero analytics SDKs, advertising trackers, or user telemetry.',
       actionText: 'I Understand',
     );
   }
@@ -1162,38 +1201,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (reminderService.isEnabled) ...[
-                          GestureDetector(
-                            onTap: _pickReminderTime,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8.0,
-                                vertical: 4.0,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceSubtle,
-                                borderRadius: BorderRadius.circular(8.0),
-                                border: Border.all(
-                                  color: AppColors.border,
-                                  width: 0.8,
+                          Semantics(
+                            button: true,
+                            label:
+                                'Change reminder time, currently ${reminderService.settings.formattedTime}',
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: _pickReminderTime,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minWidth: 48.0,
+                                  minHeight: 48.0,
                                 ),
-                              ),
-                              child: Text(
-                                reminderService.settings.formattedTime,
-                                style: const TextStyle(
-                                  fontSize: 12.0,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10.0,
+                                      vertical: 6.0,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceSubtle,
+                                      borderRadius: BorderRadius.circular(8.0),
+                                      border: Border.all(
+                                        color: AppColors.border,
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      reminderService.settings.formattedTime,
+                                      style: const TextStyle(
+                                        fontSize: 12.0,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                           const SizedBox(width: AppSpacing.xs),
                         ],
-                        Switch.adaptive(
-                          value: reminderService.isEnabled,
-                          onChanged: _toggleReminder,
-                          activeThumbColor: AppColors.textPrimary,
-                          activeTrackColor: AppColors.surfaceSubtle,
+                        Semantics(
+                          label: 'Daily reminder notification toggle',
+                          child: Switch.adaptive(
+                            value: reminderService.isEnabled,
+                            onChanged: _toggleReminder,
+                            activeThumbColor: AppColors.textPrimary,
+                            activeTrackColor: AppColors.surfaceSubtle,
+                          ),
                         ),
                       ],
                     ),

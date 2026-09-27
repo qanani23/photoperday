@@ -137,11 +137,7 @@ class PhotoEntry {
 
     final rawCodePoint = json['iconCodePoint'];
     final codePoint = rawCodePoint is num ? rawCodePoint.toInt() : null;
-    final fontFamily = json['iconFontFamily']?.toString();
-    final icon = codePoint != null
-        // ignore: non_const_argument_for_const_parameter
-        ? IconData(codePoint, fontFamily: fontFamily ?? 'MaterialIcons')
-        : Icons.photo_camera_rounded;
+    final icon = _resolveIcon(codePoint);
 
     final syncStatusStr = json['syncStatus']?.toString();
     final syncStatus = SyncStatus.fromJson(syncStatusStr);
@@ -229,5 +225,55 @@ class PhotoEntry {
           ? null
           : (authorizedEmail ?? this.authorizedEmail),
     );
+  }
+
+  /// Maps serialized icon code points to compile-time constant [IconData] instances.
+  ///
+  /// This ensures release builds support icon font tree-shaking without compiler errors.
+  static IconData _resolveIcon(int? codePoint) {
+    if (codePoint == null) return Icons.photo_camera_rounded;
+    switch (codePoint) {
+      case 0xe156:
+      case 0xf0663:
+        return Icons.coffee_rounded;
+      case 0xf002b:
+        return Icons.park_rounded;
+      case 0xf0083:
+        return Icons.pets_rounded;
+      case 0xe1b6:
+        return Icons.directions_walk_rounded;
+      case 0xe4a1:
+        return Icons.restaurant_rounded;
+      case 0xe6e2:
+        return Icons.wb_sunny_rounded;
+      case 0xf83d:
+        return Icons.local_florist_rounded;
+      case 0xe439:
+        return Icons.music_note_rounded;
+      case 0xe0ef:
+        return Icons.book_rounded;
+      case 0xe25a:
+        return Icons.flight_takeoff_rounded;
+      case 0xe4b6:
+        return Icons.sports_basketball_rounded;
+      case 0xe432:
+        return Icons.movie_rounded;
+      case 0xe16a:
+        return Icons.computer_rounded;
+      case 0xe11e:
+        return Icons.brush_rounded;
+      case 0xf85d:
+        return Icons.pool_rounded;
+      case 0xe0b2:
+        return Icons.beach_access_rounded;
+      case 0xe197:
+        return Icons.dark_mode_rounded;
+      case 0xe0bb:
+        return Icons.bed_rounded;
+      case 0xe117:
+        return Icons.brightness_3_rounded;
+      default:
+        return Icons.photo_camera_rounded;
+    }
   }
 }

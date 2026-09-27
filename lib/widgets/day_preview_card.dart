@@ -32,25 +32,35 @@ class DayPreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateFormatted = _formatDate(selectedDate);
 
+    final cardSemanticLabel = photoEntry != null
+        ? 'Selected day details, $dateFormatted, ${photoEntry!.title}. Tap to open photo detail.'
+        : 'Selected day details, $dateFormatted. No photo recorded.';
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.pageHorizontal,
         vertical: AppSpacing.md,
       ),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: photoEntry != null ? () => onPhotoTap?.call(photoEntry!) : null,
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: AppRadii.card,
-            border: Border.all(color: AppColors.border, width: 1.0),
-            boxShadow: AppShadows.card,
+      child: Semantics(
+        button: photoEntry != null,
+        label: cardSemanticLabel,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: photoEntry != null
+              ? () => onPhotoTap?.call(photoEntry!)
+              : null,
+          child: Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: AppRadii.card,
+              border: Border.all(color: AppColors.border, width: 1.0),
+              boxShadow: AppShadows.card,
+            ),
+            child: photoEntry != null
+                ? _buildPhotoContent(dateFormatted)
+                : _buildEmptyContent(dateFormatted),
           ),
-          child: photoEntry != null
-              ? _buildPhotoContent(dateFormatted)
-              : _buildEmptyContent(dateFormatted),
         ),
       ),
     );
@@ -67,37 +77,44 @@ class DayPreviewCard extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7.0,
-                    vertical: 2.5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentLight,
-                    borderRadius: BorderRadius.circular(6.0),
-                  ),
-                  child: Text(
-                    entry.category,
-                    style: const TextStyle(
-                      fontSize: 10.0,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.accent,
+            Expanded(
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7.0,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentLight,
+                      borderRadius: BorderRadius.circular(6.0),
+                    ),
+                    child: Text(
+                      entry.category,
+                      style: const TextStyle(
+                        fontSize: 10.0,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accent,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  dateFormatted,
-                  style: const TextStyle(
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    child: Text(
+                      dateFormatted,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontSize: 12.0,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            const SizedBox(width: AppSpacing.xs),
             Text(
               entry.timeFormatted,
               style: AppTypography.caption.copyWith(fontSize: 11.0),
@@ -255,23 +272,36 @@ class DayPreviewCard extends StatelessWidget {
           ),
         ),
         if (isToday)
-          GestureDetector(
-            onTap: onActionTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12.0,
-                vertical: 6.0,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.accent,
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-              child: const Text(
-                'Capture',
-                style: TextStyle(
-                  fontSize: 11.0,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+          Semantics(
+            button: true,
+            label: 'Capture photo for today',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onActionTap,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minWidth: 48.0,
+                  minHeight: 48.0,
+                ),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14.0,
+                      vertical: 8.0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
+                    child: const Text(
+                      'Capture',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

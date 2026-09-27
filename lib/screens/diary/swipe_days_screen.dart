@@ -409,32 +409,37 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               // Hero Photo Container
-              GestureDetector(
-                onTap: () => _openDetail(entry),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: AppRadii.card,
-                    border: Border.all(color: AppColors.border, width: 1.0),
-                    boxShadow: AppShadows.card,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: AppRadii.card,
-                    child: AspectRatio(
-                      aspectRatio: 4 / 3,
-                      child: Semantics(
-                        image: true,
-                        label: 'Photo captured on $formattedDate',
-                        child:
-                            (entry.hasRealImage && entry.isImageFileAvailable)
-                            ? Image.file(
-                                File(entry.imagePath!),
-                                cacheWidth: 1080,
-                                cacheHeight: 1080,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    _buildFallbackPhoto(entry),
-                              )
-                            : _buildFallbackPhoto(entry),
+              Semantics(
+                button: true,
+                label:
+                    'View photo details for ${entry.title.trim().isNotEmpty ? entry.title.trim() : formattedDate}',
+                child: GestureDetector(
+                  onTap: () => _openDetail(entry),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: AppRadii.card,
+                      border: Border.all(color: AppColors.border, width: 1.0),
+                      boxShadow: AppShadows.card,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: AppRadii.card,
+                      child: AspectRatio(
+                        aspectRatio: 4 / 3,
+                        child: Semantics(
+                          image: true,
+                          label: 'Photo captured on $formattedDate',
+                          child:
+                              (entry.hasRealImage && entry.isImageFileAvailable)
+                              ? Image.file(
+                                  File(entry.imagePath!),
+                                  cacheWidth: 1080,
+                                  cacheHeight: 1080,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      _buildFallbackPhoto(entry),
+                                )
+                              : _buildFallbackPhoto(entry),
+                        ),
                       ),
                     ),
                   ),
@@ -561,57 +566,82 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Older / Previous Day Button
-              Semantics(
-                label: 'Previous Day (Older)',
-                button: true,
-                enabled: canGoPrevious,
-                child: TextButton.icon(
-                  onPressed: canGoPrevious ? _goToPrevious : null,
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    size: 14.0,
-                  ),
-                  label: const Text('Older'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    disabledForegroundColor: AppColors.textMuted.withValues(
-                      alpha: 0.4,
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Semantics(
+                    label: 'Previous Day (Older)',
+                    button: true,
+                    enabled: canGoPrevious,
+                    child: TextButton.icon(
+                      onPressed: canGoPrevious ? _goToPrevious : null,
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 14.0,
+                      ),
+                      label: const Text('Older'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        disabledForegroundColor: AppColors.textMuted.withValues(
+                          alpha: 0.4,
+                        ),
+                        minimumSize: const Size(48.0, 48.0),
+                      ),
                     ),
                   ),
                 ),
               ),
 
+              const SizedBox(width: 4.0),
+
               // Center Action: View Details
-              OutlinedButton.icon(
-                onPressed: () => _openDetail(currentEntry),
-                icon: const Icon(Icons.open_in_new_rounded, size: 14.0),
-                label: const Text('View Details'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14.0,
-                    vertical: 8.0,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14.0),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openDetail(currentEntry),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 14.0),
+                    label: const Text('View Details'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: AppColors.border),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14.0,
+                        vertical: 8.0,
+                      ),
+                      minimumSize: const Size(48.0, 48.0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14.0),
+                      ),
+                    ),
                   ),
                 ),
               ),
 
+              const SizedBox(width: 4.0),
+
               // Newer / Next Day Button
-              Semantics(
-                label: 'Next Day (Newer)',
-                button: true,
-                enabled: canGoNext,
-                child: TextButton.icon(
-                  onPressed: canGoNext ? () => _goToNext(total) : null,
-                  label: const Text('Newer'),
-                  icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14.0),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    disabledForegroundColor: AppColors.textMuted.withValues(
-                      alpha: 0.4,
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Semantics(
+                    label: 'Next Day (Newer)',
+                    button: true,
+                    enabled: canGoNext,
+                    child: TextButton.icon(
+                      onPressed: canGoNext ? () => _goToNext(total) : null,
+                      label: const Text('Newer'),
+                      icon: const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14.0,
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        disabledForegroundColor: AppColors.textMuted.withValues(
+                          alpha: 0.4,
+                        ),
+                        minimumSize: const Size(48.0, 48.0),
+                      ),
                     ),
                   ),
                 ),

@@ -33,7 +33,13 @@ class SectionHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(title, style: AppTypography.sectionTitle),
+          Expanded(
+            child: Text(
+              title,
+              style: AppTypography.sectionTitle,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           if (onPrevious != null || onNext != null)
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -74,14 +80,19 @@ class SectionHeader extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: Container(
-            width: 38.0,
-            height: 38.0,
-            decoration: const BoxDecoration(
-              color: AppColors.surfaceSubtle,
-              shape: BoxShape.circle,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48.0, minHeight: 48.0),
+            child: Center(
+              child: Container(
+                width: 38.0,
+                height: 38.0,
+                decoration: const BoxDecoration(
+                  color: AppColors.surfaceSubtle,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 22.0, color: AppColors.textPrimary),
+              ),
             ),
-            child: Icon(icon, size: 22.0, color: AppColors.textPrimary),
           ),
         ),
       ),

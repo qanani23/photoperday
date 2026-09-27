@@ -34,23 +34,30 @@ class AppHeaderAction extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppRadii.pill),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: size,
-                  height: size,
-                  decoration: const BoxDecoration(
-                    color: AppColors.surfaceSubtle,
-                    shape: BoxShape.circle,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 48.0, minHeight: 48.0),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 4.0,
+                vertical: 2.0,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: size,
+                    height: size,
+                    decoration: const BoxDecoration(
+                      color: AppColors.surfaceSubtle,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 20.0, color: AppColors.textPrimary),
                   ),
-                  child: Icon(icon, size: 20.0, color: AppColors.textPrimary),
-                ),
-                const SizedBox(height: 3.0),
-                Text(label, style: AppTypography.actionLabel),
-              ],
+                  const SizedBox(height: 3.0),
+                  Text(label, style: AppTypography.actionLabel),
+                ],
+              ),
             ),
           ),
         ),

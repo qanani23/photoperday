@@ -218,21 +218,29 @@ class _CameraScreenState extends State<CameraScreen>
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => Navigator.of(context).pop(),
-              child: Container(
-                width: 44.0,
-                height: 44.0,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    width: 0.8,
-                  ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minWidth: 48.0,
+                  minHeight: 48.0,
                 ),
-                child: const Icon(
-                  Icons.close_rounded,
-                  color: Colors.white,
-                  size: 22.0,
+                child: Center(
+                  child: Container(
+                    width: 44.0,
+                    height: 44.0,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                      size: 22.0,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -253,21 +261,29 @@ class _CameraScreenState extends State<CameraScreen>
                   await _cameraService.switchCamera();
                   if (mounted) setState(() {});
                 },
-                child: Container(
-                  width: 44.0,
-                  height: 44.0,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      width: 0.8,
-                    ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 48.0,
+                    minHeight: 48.0,
                   ),
-                  child: const Icon(
-                    Icons.flip_camera_ios_outlined,
-                    color: Colors.white,
-                    size: 20.0,
+                  child: Center(
+                    child: Container(
+                      width: 44.0,
+                      height: 44.0,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.flip_camera_ios_outlined,
+                        color: Colors.white,
+                        size: 20.0,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -421,33 +437,48 @@ class _CameraScreenState extends State<CameraScreen>
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppSpacing.lg),
-              ElevatedButton(
-                onPressed: _requestPermissionAgain,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.textPrimary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24.0,
-                    vertical: 13.0,
+              Semantics(
+                button: true,
+                label: 'Grant camera permission',
+                child: ElevatedButton(
+                  onPressed: _requestPermissionAgain,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.textPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0,
+                      vertical: 13.0,
+                    ),
+                    minimumSize: const Size(48.0, 48.0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
+                    elevation: 0,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16.0),
+                  child: const Text(
+                    'Grant Permission',
+                    style: TextStyle(
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  elevation: 0,
-                ),
-                child: const Text(
-                  'Grant Permission',
-                  style: TextStyle(fontSize: 14.0, fontWeight: FontWeight.w600),
                 ),
               ),
               const SizedBox(height: AppSpacing.xs),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontWeight: FontWeight.w500,
+              Semantics(
+                button: true,
+                label: 'Cancel and return',
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48.0, 48.0),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
@@ -501,39 +532,49 @@ class _CameraScreenState extends State<CameraScreen>
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.border),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20.0,
-                        vertical: 11.0,
+                  Semantics(
+                    button: true,
+                    label: 'Cancel and return',
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.border),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20.0,
+                          vertical: 11.0,
+                        ),
+                        minimumSize: const Size(48.0, 48.0),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14.0),
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14.0),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: AppColors.textSecondary),
                       ),
-                    ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(color: AppColors.textSecondary),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  ElevatedButton(
-                    onPressed: _initializeCamera,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.textPrimary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20.0,
-                        vertical: 11.0,
+                  Semantics(
+                    button: true,
+                    label: 'Retry opening camera',
+                    child: ElevatedButton(
+                      onPressed: _initializeCamera,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.textPrimary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20.0,
+                          vertical: 11.0,
+                        ),
+                        minimumSize: const Size(48.0, 48.0),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14.0),
+                        ),
+                        elevation: 0,
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14.0),
-                      ),
-                      elevation: 0,
+                      child: const Text('Retry'),
                     ),
-                    child: const Text('Retry'),
                   ),
                 ],
               ),

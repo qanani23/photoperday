@@ -449,17 +449,25 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                     Navigator.of(context).pop();
                   }
                 },
-                child: Container(
-                  width: 40.0,
-                  height: 40.0,
-                  decoration: const BoxDecoration(
-                    color: AppColors.surfaceSubtle,
-                    shape: BoxShape.circle,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 48.0,
+                    minHeight: 48.0,
                   ),
-                  child: const Icon(
-                    Icons.arrow_back_rounded,
-                    size: 20.0,
-                    color: AppColors.textPrimary,
+                  child: Center(
+                    child: Container(
+                      width: 40.0,
+                      height: 40.0,
+                      decoration: const BoxDecoration(
+                        color: AppColors.surfaceSubtle,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_rounded,
+                        size: 20.0,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -501,22 +509,30 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: _cancelEditMode,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0,
-                      vertical: 6.0,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minWidth: 48.0,
+                      minHeight: 48.0,
                     ),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceSubtle,
-                      borderRadius: BorderRadius.circular(16.0),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
-                        fontSize: 12.0,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14.0,
+                          vertical: 8.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceSubtle,
+                          borderRadius: BorderRadius.circular(16.0),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 12.0,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -535,17 +551,25 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: _openSwipeDays,
-                      child: Container(
-                        width: 40.0,
-                        height: 40.0,
-                        decoration: const BoxDecoration(
-                          color: AppColors.surfaceSubtle,
-                          shape: BoxShape.circle,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: 48.0,
+                          minHeight: 48.0,
                         ),
-                        child: const Icon(
-                          Icons.view_carousel_rounded,
-                          size: 19.0,
-                          color: AppColors.textPrimary,
+                        child: Center(
+                          child: Container(
+                            width: 40.0,
+                            height: 40.0,
+                            decoration: const BoxDecoration(
+                              color: AppColors.surfaceSubtle,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.view_carousel_rounded,
+                              size: 19.0,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -560,17 +584,25 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: _enterEditMode,
-                      child: Container(
-                        width: 40.0,
-                        height: 40.0,
-                        decoration: const BoxDecoration(
-                          color: AppColors.surfaceSubtle,
-                          shape: BoxShape.circle,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: 48.0,
+                          minHeight: 48.0,
                         ),
-                        child: const Icon(
-                          Icons.edit_outlined,
-                          size: 18.0,
-                          color: AppColors.textPrimary,
+                        child: Center(
+                          child: Container(
+                            width: 40.0,
+                            height: 40.0,
+                            decoration: const BoxDecoration(
+                              color: AppColors.surfaceSubtle,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.edit_outlined,
+                              size: 18.0,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -585,119 +617,127 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
 
   /// Prominent Hero Photo Container
   Widget _buildHeroPhoto() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
-      width: double.infinity,
-      height: _isEditing ? 180.0 : 380.0,
-      decoration: const BoxDecoration(
-        borderRadius: AppRadii.card,
-        boxShadow: AppShadows.card,
-      ),
-      child: ClipRRect(
-        borderRadius: AppRadii.card,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Photo Content (Real Image or Gradient Art fallback)
-            if (_currentEntry.hasRealImage &&
-                _currentEntry.isImageFileAvailable)
-              Image.file(
-                File(_currentEntry.imagePath!),
-                cacheWidth: 1440,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    _buildFallbackArt(),
-              )
-            else
-              _buildFallbackArt(),
+    final heroSemanticLabel = _currentEntry.title.trim().isNotEmpty
+        ? 'Photo memory: ${_currentEntry.title.trim()}'
+        : 'Photo memory captured on ${_formatDate(_currentEntry.date)}';
 
-            // Vignette Shading
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0x33000000),
-                    Colors.transparent,
-                    Color(0x66000000),
-                  ],
-                  stops: [0.0, 0.5, 1.0],
+    return Semantics(
+      image: true,
+      label: heroSemanticLabel,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        width: double.infinity,
+        height: _isEditing ? 180.0 : 380.0,
+        decoration: const BoxDecoration(
+          borderRadius: AppRadii.card,
+          boxShadow: AppShadows.card,
+        ),
+        child: ClipRRect(
+          borderRadius: AppRadii.card,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Photo Content (Real Image or Gradient Art fallback)
+              if (_currentEntry.hasRealImage &&
+                  _currentEntry.isImageFileAvailable)
+                Image.file(
+                  File(_currentEntry.imagePath!),
+                  cacheWidth: 1440,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      _buildFallbackArt(),
+                )
+              else
+                _buildFallbackArt(),
+
+              // Vignette Shading
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x33000000),
+                      Colors.transparent,
+                      Color(0x66000000),
+                    ],
+                    stops: [0.0, 0.5, 1.0],
+                  ),
                 ),
               ),
-            ),
 
-            // Category Badge Top-Left
-            Positioned(
-              top: 14.0,
-              left: 14.0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10.0,
-                  vertical: 4.5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.wb_sunny_rounded,
-                      size: 12.0,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 4.0),
-                    Text(
-                      _currentEntry.category,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
+              // Category Badge Top-Left
+              Positioned(
+                top: 14.0,
+                left: 14.0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10.0,
+                    vertical: 4.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.wb_sunny_rounded,
+                        size: 12.0,
                         color: Colors.white,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4.0),
+                      Text(
+                        _currentEntry.category,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            // Time Badge Bottom-Left
-            Positioned(
-              bottom: 14.0,
-              left: 14.0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10.0,
-                  vertical: 4.5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.access_time_rounded,
-                      size: 12.0,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 4.0),
-                    Text(
-                      _currentEntry.timeFormatted,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
+              // Time Badge Bottom-Left
+              Positioned(
+                bottom: 14.0,
+                left: 14.0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10.0,
+                    vertical: 4.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.access_time_rounded,
+                        size: 12.0,
                         color: Colors.white,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4.0),
+                      Text(
+                        _currentEntry.timeFormatted,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -926,11 +966,10 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
                   foregroundColor: AppColors.accent,
                   side: const BorderSide(color: AppColors.accent),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12.0,
-                    vertical: 6.0,
+                    horizontal: 14.0,
+                    vertical: 8.0,
                   ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  minimumSize: const Size(48.0, 48.0),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12.0),
                   ),
@@ -1237,16 +1276,21 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
       children: [
         SizedBox(
           width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _openSwipeDays,
-            icon: const Icon(Icons.view_carousel_rounded, size: 16.0),
-            label: const Text('Browse Days'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.textPrimary,
-              side: const BorderSide(color: AppColors.border),
-              padding: const EdgeInsets.symmetric(vertical: 12.0),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
+          child: Semantics(
+            button: true,
+            label: 'Browse recorded days',
+            child: OutlinedButton.icon(
+              onPressed: _openSwipeDays,
+              icon: const Icon(Icons.view_carousel_rounded, size: 16.0),
+              label: const Text('Browse Days'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                minimumSize: const Size(double.infinity, 48.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
               ),
             ),
           ),
@@ -1255,32 +1299,42 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _enterEditMode,
-                icon: const Icon(Icons.edit_outlined, size: 16.0),
-                label: const Text('Edit Memory'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(vertical: 12.0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16.0),
+              child: Semantics(
+                button: true,
+                label: 'Edit memory details',
+                child: OutlinedButton.icon(
+                  onPressed: _enterEditMode,
+                  icon: const Icon(Icons.edit_outlined, size: 16.0),
+                  label: const Text('Edit Memory'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    minimumSize: const Size(0, 48.0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _triggerMockShare,
-                icon: const Icon(Icons.share_outlined, size: 16.0),
-                label: const Text('Share'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(vertical: 12.0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16.0),
+              child: Semantics(
+                button: true,
+                label: 'Share memory',
+                child: OutlinedButton.icon(
+                  onPressed: _triggerMockShare,
+                  icon: const Icon(Icons.share_outlined, size: 16.0),
+                  label: const Text('Share'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    minimumSize: const Size(0, 48.0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
                   ),
                 ),
               ),
@@ -1290,22 +1344,27 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
         const SizedBox(height: AppSpacing.sm),
         SizedBox(
           width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _showDeleteConfirmationDialog,
-            icon: Icon(
-              Icons.delete_outline_rounded,
-              size: 16.0,
-              color: Colors.red.shade700,
-            ),
-            label: Text(
-              'Delete Memory',
-              style: TextStyle(color: Colors.red.shade700),
-            ),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: Colors.red.shade200),
-              padding: const EdgeInsets.symmetric(vertical: 12.0),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
+          child: Semantics(
+            button: true,
+            label: 'Delete memory from your daily journal',
+            child: OutlinedButton.icon(
+              onPressed: _showDeleteConfirmationDialog,
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                size: 16.0,
+                color: Colors.red.shade700,
+              ),
+              label: Text(
+                'Delete Memory',
+                style: TextStyle(color: Colors.red.shade700),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: Colors.red.shade200),
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                minimumSize: const Size(double.infinity, 48.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
               ),
             ),
           ),

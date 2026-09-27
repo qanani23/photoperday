@@ -132,12 +132,17 @@ class VisualDiaryEntryCard extends StatelessWidget {
                             child: InkWell(
                               onTap: () => onBrowseTap?.call(entry),
                               borderRadius: BorderRadius.circular(12.0),
-                              child: const Padding(
-                                padding: EdgeInsets.all(3.0),
-                                child: Icon(
-                                  Icons.view_carousel_rounded,
-                                  size: 16.0,
-                                  color: AppColors.textSecondary,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minWidth: 44.0,
+                                  minHeight: 44.0,
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.view_carousel_rounded,
+                                    size: 16.0,
+                                    color: AppColors.textSecondary,
+                                  ),
                                 ),
                               ),
                             ),

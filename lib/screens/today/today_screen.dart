@@ -214,69 +214,73 @@ class _TodayScreenState extends State<TodayScreen> {
       child: Material(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadii.md),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadii.md),
-          onTap: () {
-            Navigator.of(
-              context,
-            ).pushNamed(AppConstants.memoriesRoute, arguments: today);
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.sm + 2,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadii.md),
-              border: Border.all(color: AppColors.border, width: 0.8),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36.0,
-                  height: 36.0,
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
+        child: Semantics(
+          button: true,
+          label: 'On This Day, $text. Tap to view memories.',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            onTap: () {
+              Navigator.of(
+                context,
+              ).pushNamed(AppConstants.memoriesRoute, arguments: today);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm + 2,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                border: Border.all(color: AppColors.border, width: 0.8),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36.0,
+                    height: 36.0,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.history_rounded,
+                      color: AppColors.accent,
+                      size: 20.0,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.history_rounded,
-                    color: AppColors.accent,
-                    size: 20.0,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'On This Day',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'On This Day',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 1.5),
-                      Text(
-                        text,
-                        style: const TextStyle(
-                          fontSize: 12.0,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary,
+                        const SizedBox(height: 1.5),
+                        Text(
+                          text,
+                          style: const TextStyle(
+                            fontSize: 12.0,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 14.0,
-                  color: AppColors.textMuted,
-                ),
-              ],
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14.0,
+                    color: AppColors.textMuted,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -408,163 +412,168 @@ class _TodayScreenState extends State<TodayScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Hero Photo Container
-        GestureDetector(
-          onTap: () {
-            Navigator.pushNamed(
-              context,
-              AppConstants.photoDetailRoute,
-              arguments:
-                  PersistentDailyPhotoStore.instance.getPhoto(
-                    DateTime(2026, 3, 15),
-                  ) ??
-                  _todayPhoto,
-            );
-          },
-          child: Container(
-            width: double.infinity,
-            height: 340.0,
-            decoration: const BoxDecoration(
-              borderRadius: AppRadii.card,
-              boxShadow: AppShadows.card,
-            ),
-            child: ClipRRect(
-              borderRadius: AppRadii.card,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Photo Content (Real Image or Gradient Art fallback)
-                  if (_todayPhoto.hasRealImage &&
-                      _todayPhoto.isImageFileAvailable)
-                    Image.file(
-                      File(_todayPhoto.imagePath!),
-                      cacheWidth: 1080,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          _buildGradientArt(),
-                    )
-                  else
-                    _buildGradientArt(),
+        Semantics(
+          button: true,
+          label:
+              "Today's photo memory: ${_todayPhoto.title}. Tap to view photo details.",
+          child: GestureDetector(
+            onTap: () {
+              Navigator.pushNamed(
+                context,
+                AppConstants.photoDetailRoute,
+                arguments:
+                    PersistentDailyPhotoStore.instance.getPhoto(
+                      DateTime(2026, 3, 15),
+                    ) ??
+                    _todayPhoto,
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              height: 340.0,
+              decoration: const BoxDecoration(
+                borderRadius: AppRadii.card,
+                boxShadow: AppShadows.card,
+              ),
+              child: ClipRRect(
+                borderRadius: AppRadii.card,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Photo Content (Real Image or Gradient Art fallback)
+                    if (_todayPhoto.hasRealImage &&
+                        _todayPhoto.isImageFileAvailable)
+                      Image.file(
+                        File(_todayPhoto.imagePath!),
+                        cacheWidth: 1080,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _buildGradientArt(),
+                      )
+                    else
+                      _buildGradientArt(),
 
-                  // Vignette & Contrast Gradients
-                  Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0x33000000),
-                          Colors.transparent,
-                          Color(0x66000000),
-                        ],
-                        stops: [0.0, 0.5, 1.0],
-                      ),
-                    ),
-                  ),
-
-                  // Top Category Tag & Time Badge
-                  Positioned(
-                    top: 14.0,
-                    left: 14.0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10.0,
-                        vertical: 4.0,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(12.0),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.wb_sunny_rounded,
-                            size: 12.0,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 4.0),
-                          Text(
-                            _todayPhoto.category,
-                            style: const TextStyle(
-                              fontSize: 11.0,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Top-Right Backup Status Indicator
-                  Positioned(
-                    top: 14.0,
-                    right: 14.0,
-                    child: _buildSyncStatusBadge(_todayPhoto),
-                  ),
-
-                  // Bottom Overlay Day & Timestamp
-                  Positioned(
-                    bottom: 14.0,
-                    left: 14.0,
-                    right: 14.0,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9.0,
-                            vertical: 3.5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.45),
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          child: Text(
-                            _todayPhoto.timeFormatted,
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
+                    // Vignette & Contrast Gradients
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0x33000000),
+                            Colors.transparent,
+                            Color(0x66000000),
+                          ],
+                          stops: [0.0, 0.5, 1.0],
                         ),
-                        Semantics(
-                          label: 'View photo in full screen',
-                          button: true,
-                          child: Tooltip(
-                            message: 'Full screen',
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  AppConstants.photoDetailRoute,
-                                  arguments:
-                                      PersistentDailyPhotoStore.instance
-                                          .getPhoto(DateTime(2026, 3, 15)) ??
-                                      _todayPhoto,
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(6.0),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.45),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.fullscreen_rounded,
-                                  size: 16.0,
-                                  color: Colors.white,
+                      ),
+                    ),
+
+                    // Top Category Tag & Time Badge
+                    Positioned(
+                      top: 14.0,
+                      left: 14.0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10.0,
+                          vertical: 4.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.wb_sunny_rounded,
+                              size: 12.0,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 4.0),
+                            Text(
+                              _todayPhoto.category,
+                              style: const TextStyle(
+                                fontSize: 11.0,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Top-Right Backup Status Indicator
+                    Positioned(
+                      top: 14.0,
+                      right: 14.0,
+                      child: _buildSyncStatusBadge(_todayPhoto),
+                    ),
+
+                    // Bottom Overlay Day & Timestamp
+                    Positioned(
+                      bottom: 14.0,
+                      left: 14.0,
+                      right: 14.0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9.0,
+                              vertical: 3.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            child: Text(
+                              _todayPhoto.timeFormatted,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          Semantics(
+                            label: 'View photo in full screen',
+                            button: true,
+                            child: Tooltip(
+                              message: 'Full screen',
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  Navigator.pushNamed(
+                                    context,
+                                    AppConstants.photoDetailRoute,
+                                    arguments:
+                                        PersistentDailyPhotoStore.instance
+                                            .getPhoto(DateTime(2026, 3, 15)) ??
+                                        _todayPhoto,
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(6.0),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.45),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.fullscreen_rounded,
+                                    size: 16.0,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -636,31 +645,41 @@ class _TodayScreenState extends State<TodayScreen> {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _promptPhotoSource,
-                icon: const Icon(Icons.refresh_rounded, size: 16.0),
-                label: const Text('Replace Photo'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(vertical: 12.0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16.0),
+              child: Semantics(
+                button: true,
+                label: "Replace today's photo",
+                child: OutlinedButton.icon(
+                  onPressed: _promptPhotoSource,
+                  icon: const Icon(Icons.refresh_rounded, size: 16.0),
+                  label: const Text('Replace Photo'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    minimumSize: const Size(0, 48.0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            IconButton.outlined(
-              onPressed: () => _showMockActionMessage('Share'),
-              tooltip: 'Share photo',
-              icon: const Icon(Icons.share_outlined, size: 18.0),
-              color: AppColors.textPrimary,
-              style: IconButton.styleFrom(
-                side: const BorderSide(color: AppColors.border),
-                padding: const EdgeInsets.all(12.0),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16.0),
+            Semantics(
+              button: true,
+              label: "Share today's photo",
+              child: IconButton.outlined(
+                onPressed: () => _showMockActionMessage('Share'),
+                tooltip: 'Share photo',
+                icon: const Icon(Icons.share_outlined, size: 18.0),
+                color: AppColors.textPrimary,
+                style: IconButton.styleFrom(
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.all(12.0),
+                  minimumSize: const Size(48.0, 48.0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16.0),
+                  ),
                 ),
               ),
             ),
@@ -757,20 +776,25 @@ class _TodayScreenState extends State<TodayScreen> {
           const SizedBox(height: AppSpacing.xl),
 
           // Primary Capture Button
-          ElevatedButton.icon(
-            onPressed: _promptPhotoSource,
-            icon: const Icon(Icons.photo_camera_rounded, size: 18.0),
-            label: const Text('Capture Today\'s Photo'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.textPrimary,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24.0,
-                vertical: 14.0,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24.0),
+          Semantics(
+            button: true,
+            label: "Capture today's photo",
+            child: ElevatedButton.icon(
+              onPressed: _promptPhotoSource,
+              icon: const Icon(Icons.photo_camera_rounded, size: 18.0),
+              label: const Text('Capture Today\'s Photo'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.textPrimary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0,
+                  vertical: 14.0,
+                ),
+                minimumSize: const Size(0, 48.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24.0),
+                ),
               ),
             ),
           ),
