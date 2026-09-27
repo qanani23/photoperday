@@ -127,9 +127,9 @@ class SyncOperation {
 
   /// Safely deserializes a JSON map into a [SyncOperation].
   ///
-  /// Guarantees safe fallbacks for missing or malformed attributes.
+  /// Guarantees safe fallbacks for missing or malformed attributes and unexpected field types.
   factory SyncOperation.fromJson(Map<String, dynamic> json) {
-    final rawDateKey = json['dateKey'] as String? ?? '1970-01-01';
+    final rawDateKey = json['dateKey']?.toString() ?? '1970-01-01';
     DateKey resolvedDateKey;
     try {
       resolvedDateKey = DateKey.parse(rawDateKey);
@@ -137,7 +137,7 @@ class SyncOperation {
       resolvedDateKey = const DateKey(1970, 1, 1);
     }
 
-    final rawCreatedAt = json['createdAt'] as String?;
+    final rawCreatedAt = json['createdAt']?.toString();
     DateTime resolvedCreatedAt;
     if (rawCreatedAt != null) {
       resolvedCreatedAt =
@@ -147,32 +147,37 @@ class SyncOperation {
     }
 
     DateTime? lastAttempt;
-    final rawLastAttempt = json['lastAttemptAt'] as String?;
+    final rawLastAttempt = json['lastAttemptAt']?.toString();
     if (rawLastAttempt != null) {
       lastAttempt = DateTime.tryParse(rawLastAttempt)?.toUtc();
     }
 
     DateTime? nextAttempt;
-    final rawNextAttempt = json['nextAttemptAt'] as String?;
+    final rawNextAttempt = json['nextAttemptAt']?.toString();
     if (rawNextAttempt != null) {
       nextAttempt = DateTime.tryParse(rawNextAttempt)?.toUtc();
     }
 
+    final rawRetry = json['retryCount'];
+    final int retryCount = rawRetry is num
+        ? rawRetry.toInt()
+        : (int.tryParse(rawRetry?.toString() ?? '') ?? 0);
+
     return SyncOperation(
       id:
-          json['id'] as String? ??
+          json['id']?.toString() ??
           'op_${resolvedDateKey.format()}_${resolvedCreatedAt.microsecondsSinceEpoch}',
       type: SyncOperationType.fromJson(json['type']),
       dateKey: resolvedDateKey,
       createdAt: resolvedCreatedAt,
       status: SyncOperationStatus.fromJson(json['status']),
-      retryCount: json['retryCount'] as int? ?? 0,
+      retryCount: retryCount,
       lastAttemptAt: lastAttempt,
       nextAttemptAt: nextAttempt,
-      lastError: json['lastError'] as String?,
-      driveFileId: json['driveFileId'] as String?,
+      lastError: json['lastError']?.toString(),
+      driveFileId: json['driveFileId']?.toString(),
       authorizedEmail:
-          (json['authorizedEmail'] ?? json['accountEmail']) as String?,
+          (json['authorizedEmail'] ?? json['accountEmail'])?.toString(),
     );
   }
 

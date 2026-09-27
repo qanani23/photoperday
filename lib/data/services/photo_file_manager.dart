@@ -73,15 +73,24 @@ class PhotoFileManager {
     final targetPath = p.join(photosDir.path, fileName);
     final targetFile = File(targetPath);
 
-    // Copy source file to app storage
-    await sourceFile.copy(targetFile.path);
+    try {
+      // Copy source file to app storage
+      await sourceFile.copy(targetFile.path);
 
-    // Verify copy completed and is non-empty
-    if (!await targetFile.exists() || await targetFile.length() == 0) {
-      throw FileSystemException(
-        'Failed to verify persistent photo copy',
-        targetPath,
-      );
+      // Verify copy completed and is non-empty
+      if (!await targetFile.exists() || await targetFile.length() == 0) {
+        throw FileSystemException(
+          'Failed to verify persistent photo copy',
+          targetPath,
+        );
+      }
+    } catch (e) {
+      try {
+        if (await targetFile.exists()) {
+          await targetFile.delete();
+        }
+      } catch (_) {}
+      rethrow;
     }
 
     return targetFile.path;

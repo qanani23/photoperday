@@ -8,6 +8,7 @@ import 'package:photo_per_day/data/services/drive_api_adapter.dart';
 import 'package:photo_per_day/data/services/drive_folder_storage.dart';
 import 'package:photo_per_day/data/services/google_auth_service.dart';
 import 'package:photo_per_day/data/services/google_drive_auth_service.dart';
+import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 
 /// Orchestrates Google Drive folder discovery, creation, and state management.
 ///
@@ -271,10 +272,109 @@ class GoogleDriveService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deletes the user's "Photo a Day" backup folder from Google Drive.
+  ///
+  /// CRITICAL GUARANTEES:
+  /// - Only affects the app's dedicated "Photo a Day" folder within `drive.file` scope.
+  /// - Never deletes arbitrary user files or folders.
+  /// - Verifies active Google Sign-In and Drive authorization before proceeding.
+  /// - Enforces account ownership checks: cannot delete another account's backup.
+  /// - Does NOT delete any local photo files or metadata from the device.
+  /// - On successful deletion, clears folder reference and updates local photo
+  ///   entries to [SyncStatus.localOnly].
+  Future<DriveDeleteResult> deleteDriveBackup({
+    PersistentDailyPhotoStore? photoStore,
+  }) async {
+    final auth = _effectiveAuth;
+    final driveAuth = _effectiveDriveAuth;
+
+    // 1. Verify user is signed in
+    if (!auth.isSignedIn) {
+      return const DriveDeleteFailure(
+        'Sign in with your Google account to delete the Google Drive backup.',
+      );
+    }
+
+    // 2. Verify Drive authorization
+    if (!driveAuth.isAuthorized) {
+      return const DriveDeleteFailure(
+        'Google Drive authorization is required to delete the backup.',
+      );
+    }
+
+    final currentEmail = auth.currentUser?.email;
+
+    // 3. Verify account ownership if current folder reference exists
+    if (_currentFolder != null &&
+        _currentFolder!.authorizedEmail != null &&
+        currentEmail != null &&
+        _currentFolder!.authorizedEmail != currentEmail) {
+      return DriveDeleteFailure(
+        'Backup folder belongs to ${_currentFolder!.authorizedEmail}, not $currentEmail.',
+      );
+    }
+
+    try {
+      final authHeaders = await driveAuth.getAuthHeaders();
+
+      // 4. Resolve folder ID to trash
+      String? folderId = _currentFolder?.folderId;
+      if (folderId == null) {
+        final existing = await _adapter.findFolder(
+          folderName: targetFolderName,
+          authHeaders: authHeaders,
+          accountEmail: currentEmail,
+        );
+        folderId = existing?.folderId;
+      }
+
+      if (folderId == null) {
+        // No backup folder exists in Google Drive
+        await clearFolderReference();
+        final store = photoStore ?? PersistentDailyPhotoStore.instance;
+        await store.onCloudBackupDeleted(authorizedEmail: currentEmail);
+        return const DriveDeleteSuccess(wasAlreadyEmpty: true);
+      }
+
+      // 5. Trash the app's dedicated folder
+      await _adapter.trashPhotoFile(fileId: folderId, authHeaders: authHeaders);
+
+      // 6. Clear local folder reference and reset local sync status
+      await clearFolderReference();
+      final store = photoStore ?? PersistentDailyPhotoStore.instance;
+      await store.onCloudBackupDeleted(authorizedEmail: currentEmail);
+
+      return const DriveDeleteSuccess(wasAlreadyEmpty: false);
+    } on DriveApiException catch (e) {
+      return DriveDeleteFailure(e.message, cause: e);
+    } catch (e) {
+      return DriveDeleteFailure(
+        'Failed to delete Google Drive backup: $e',
+        cause: e,
+      );
+    }
+  }
+
   @override
   void dispose() {
     _effectiveAuth.removeListener(_onAuthChanged);
     _effectiveDriveAuth.removeListener(_onDriveAuthChanged);
     super.dispose();
   }
+}
+
+/// Structured result of a Google Drive backup deletion attempt.
+sealed class DriveDeleteResult {
+  const DriveDeleteResult();
+}
+
+class DriveDeleteSuccess extends DriveDeleteResult {
+  final bool wasAlreadyEmpty;
+  const DriveDeleteSuccess({this.wasAlreadyEmpty = false});
+}
+
+class DriveDeleteFailure extends DriveDeleteResult {
+  final String message;
+  final Object? cause;
+  const DriveDeleteFailure(this.message, {this.cause});
 }

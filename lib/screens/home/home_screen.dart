@@ -296,8 +296,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // Days in current month
     for (int day = 1; day <= daysInMonth; day++) {
       final date = DateTime(monthDate.year, monthDate.month, day);
+      final dateKey = DateKey(monthDate.year, monthDate.month, day);
       final photo =
-          PersistentDailyPhotoStore.instance.getPhoto(date) ??
+          PersistentDailyPhotoStore.instance.getPhotoByKey(dateKey) ??
           photoService.getPhoto(date);
       final isToday = _isSameDay(date, _today);
       final isSelected = _isSameDay(date, _selectedDate);
@@ -311,7 +312,6 @@ class _HomeScreenState extends State<HomeScreen> {
         cellStyle = CalendarCellStyle.empty;
       }
 
-      final dateKey = DateKey.fromDateTime(date);
       final isSyncing =
           SyncWorker.instance.isSyncing &&
           SyncWorker.instance.activeDateKey == dateKey;

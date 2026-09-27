@@ -15,6 +15,7 @@ import 'package:photo_per_day/data/models/sync_operation_type.dart';
 import 'package:photo_per_day/data/models/sync_presentation_model.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
 import 'package:photo_per_day/data/services/daily_reminder_service.dart';
+import 'package:photo_per_day/data/services/diary_export_service.dart';
 import 'package:photo_per_day/data/services/google_auth_service.dart';
 import 'package:photo_per_day/data/services/google_drive_auth_service.dart';
 import 'package:photo_per_day/data/services/google_drive_photo_upload_service.dart';
@@ -53,6 +54,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   double? _uploadProgress;
   int _localPhotoBytes = 0;
   bool _isLoadingStorage = false;
+  bool _isExporting = false;
+  bool _isDeletingLocal = false;
+  bool _isDeletingDrive = false;
 
   @override
   void initState() {
@@ -299,6 +303,548 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SnackBar(
           content: Text('Disconnected Google account and revoked permissions'),
           duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleExportDiary() async {
+    final store = PersistentDailyPhotoStore.instance;
+    if (store.totalPhotos == 0) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: const RoundedRectangleBorder(
+            borderRadius: AppRadii.dialogRadius,
+            side: BorderSide(color: AppColors.border, width: 0.8),
+          ),
+          title: const Text(
+            'Export Diary',
+            style: TextStyle(
+              fontSize: 18.0,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          content: const Text(
+            'Your diary does not contain any photos to export yet.',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'OK',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadii.dialogRadius,
+          side: BorderSide(color: AppColors.border, width: 0.8),
+        ),
+        title: const Text(
+          'Export Your Diary',
+          style: TextStyle(
+            fontSize: 18.0,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'Export ${store.totalPhotos} photo${store.totalPhotos == 1 ? '' : 's'} and diary metadata into a standard ZIP archive.\n\n'
+          'The export includes your captured photos and a manifest.json file containing your dates, titles, captions, and locations.\n\n'
+          'The archive is created locally on your device without transmitting data over the internet.',
+          style: AppTypography.body.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.45,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(
+          horizontal: 16.0,
+          vertical: 10.0,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Export',
+              style: TextStyle(
+                color: AppColors.accent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isExporting = true);
+
+    final ExportResult result;
+    try {
+      result = await DiaryExportService.instance.exportDiary();
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
+
+    if (!mounted) return;
+
+    if (result.isSuccess) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: const RoundedRectangleBorder(
+            borderRadius: AppRadii.dialogRadius,
+            side: BorderSide(color: AppColors.border, width: 0.8),
+          ),
+          title: const Row(
+            children: [
+              Icon(
+                Icons.check_circle_outline_rounded,
+                color: AppColors.statDaysGreen,
+                size: 22.0,
+              ),
+              SizedBox(width: 8.0),
+              Text(
+                'Export Complete',
+                style: TextStyle(
+                  fontSize: 18.0,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            '${result.exportedCount} photo${result.exportedCount == 1 ? '' : 's'} exported successfully.\n\n'
+            'Archive size: ${LocalStorageCalculator.formatBytes(result.archiveSizeBytes)}.\n\n'
+            'Your photos and metadata manifest have been bundled into a standard ZIP archive.',
+            style: AppTypography.body.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                DiaryExportService.instance.cleanTemporaryExports();
+                Navigator.of(context).pop();
+              },
+              child: const Text(
+                'Done',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (result.isPartial) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: const RoundedRectangleBorder(
+            borderRadius: AppRadii.dialogRadius,
+            side: BorderSide(color: AppColors.border, width: 0.8),
+          ),
+          title: const Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.warning,
+                size: 22.0,
+              ),
+              SizedBox(width: 8.0),
+              Text(
+                'Partial Export Complete',
+                style: TextStyle(
+                  fontSize: 18.0,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            '${result.exportedCount} photo${result.exportedCount == 1 ? '' : 's'} were exported successfully.\n\n'
+            '${result.skippedCount} photo${result.skippedCount == 1 ? ' was' : 's were'} skipped because the local file was missing or unreadable on disk.\n\n'
+            'Archive size: ${LocalStorageCalculator.formatBytes(result.archiveSizeBytes)}.\n'
+            'Skipped entries are documented in the manifest.json file.',
+            style: AppTypography.body.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                DiaryExportService.instance.cleanTemporaryExports();
+                Navigator.of(context).pop();
+              },
+              child: const Text(
+                'Done',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (result.errorMessage != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: const RoundedRectangleBorder(
+            borderRadius: AppRadii.dialogRadius,
+            side: BorderSide(color: AppColors.border, width: 0.8),
+          ),
+          title: const Text(
+            'Export Failed',
+            style: TextStyle(
+              fontSize: 18.0,
+              fontWeight: FontWeight.w700,
+              color: AppColors.error,
+            ),
+          ),
+          content: Text(
+            result.errorMessage!,
+            style: AppTypography.body.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Close',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleDeleteLocalDiary() async {
+    final store = PersistentDailyPhotoStore.instance;
+    final photoCount = store.totalPhotos;
+
+    if (photoCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No local photos to delete.'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadii.dialogRadius,
+          side: BorderSide(color: AppColors.border, width: 0.8),
+        ),
+        title: const Text(
+          'Delete Local Diary?',
+          style: TextStyle(
+            fontSize: 18.0,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'This will permanently delete all $photoCount locally stored photo${photoCount == 1 ? '' : 's'} and diary entries from this device.\n\n'
+          'Your Google Drive backup will remain.\n\n'
+          'This action cannot be undone.',
+          style: AppTypography.body.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.45,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(
+          horizontal: 16.0,
+          vertical: 10.0,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Delete Local Diary',
+              style: TextStyle(
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeletingLocal = true);
+    try {
+      await store.deleteLocalDiary();
+      await _refreshLocalStorageUsage();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Local diary photos deleted. Your Google Drive backup remains safe.',
+            ),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDeletingLocal = false);
+      }
+    }
+  }
+
+  Future<void> _handleDeleteDriveBackup() async {
+    final auth = GoogleAuthService.instance;
+    final driveAuth = GoogleDriveAuthService.instance;
+
+    if (!auth.isSignedIn) {
+      _showInfoDialog(
+        title: 'Google Drive Backup',
+        content:
+            'You must be signed in with your Google account to manage or delete your Google Drive backup.',
+        actionText: 'OK',
+      );
+      return;
+    }
+
+    if (!driveAuth.isAuthorized) {
+      _showInfoDialog(
+        title: 'Google Drive Authorization',
+        content:
+            'Google Drive authorization is required to access or delete your cloud backup.',
+        actionText: 'OK',
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadii.dialogRadius,
+          side: BorderSide(color: AppColors.border, width: 0.8),
+        ),
+        title: const Text(
+          'Delete Google Drive Backup?',
+          style: TextStyle(
+            fontSize: 18.0,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'This will move your "Photo a Day" backup folder and all backed up photos to your Google Drive Trash.\n\n'
+          'Your local photos will remain safe on this device.\n\n'
+          'This action requires an active network connection.',
+          style: AppTypography.body.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.45,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(
+          horizontal: 16.0,
+          vertical: 10.0,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Delete Cloud Backup',
+              style: TextStyle(
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeletingDrive = true);
+    try {
+      final result = await GoogleDriveService.instance.deleteDriveBackup();
+      if (!mounted) return;
+
+      if (result is DriveDeleteSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.wasAlreadyEmpty
+                  ? 'No cloud backup folder found in Google Drive. Local sync status reset.'
+                  : 'Google Drive backup moved to Trash. Local photos remain intact.',
+            ),
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (result is DriveDeleteFailure) {
+        _showInfoDialog(
+          title: 'Cloud Deletion Failed',
+          content: result.message,
+          actionText: 'OK',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDeletingDrive = false);
+      }
+    }
+  }
+
+  Future<void> _handleCombinedDelete() async {
+    final store = PersistentDailyPhotoStore.instance;
+    final auth = GoogleAuthService.instance;
+    final photoCount = store.totalPhotos;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadii.dialogRadius,
+          side: BorderSide(color: AppColors.border, width: 0.8),
+        ),
+        title: const Text(
+          'Delete Local & Cloud Data?',
+          style: TextStyle(
+            fontSize: 18.0,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        content: Text(
+          'This is an irreversible action that will:\n\n'
+          '1. Permanently delete all $photoCount local photo${photoCount == 1 ? '' : 's'} and diary metadata from this device.\n\n'
+          '2. Move your Google Drive "Photo a Day" backup folder to the Trash (if connected).\n\n'
+          'Both local memories and cloud backup photos will be removed.',
+          style: AppTypography.body.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.45,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(
+          horizontal: 16.0,
+          vertical: 10.0,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Delete Everything',
+              style: TextStyle(
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    if (auth.isSignedIn && GoogleDriveAuthService.instance.isAuthorized) {
+      await GoogleDriveService.instance.deleteDriveBackup();
+    }
+    await store.deleteLocalDiary();
+    await _refreshLocalStorageUsage();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Local photos and Google Drive backup have been deleted.',
+          ),
+          duration: Duration(seconds: 3),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -796,6 +1342,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           showChevron: true,
                           onTap: _handleDisconnect,
                         ),
+                    ],
+                  ),
+
+                  const SizedBox(height: AppSpacing.lg),
+
+                  SettingsGroup(
+                    title: 'Data & Privacy',
+                    children: [
+                      _buildExportDiaryTile(),
+                      _buildDeleteLocalDiaryTile(),
+                      _buildDeleteDriveBackupTile(),
+                      _buildCombinedDeleteTile(),
                     ],
                   ),
                 ],
@@ -2120,6 +2678,86 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildExportDiaryTile() {
+    return SettingsTile(
+      title: 'Export Diary',
+      subtitle: _isExporting
+          ? 'Preparing export archive...'
+          : 'Export photos and metadata manifest as ZIP',
+      leadingIcon: Icons.file_download_outlined,
+      leadingColor: AppColors.accent,
+      showChevron: !_isExporting,
+      trailing: _isExporting
+          ? const SizedBox(
+              width: 18.0,
+              height: 18.0,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.0,
+                color: AppColors.accent,
+              ),
+            )
+          : null,
+      onTap: _isExporting ? null : _handleExportDiary,
+    );
+  }
+
+  Widget _buildDeleteLocalDiaryTile() {
+    return SettingsTile(
+      title: 'Delete Local Diary',
+      subtitle: _isDeletingLocal
+          ? 'Deleting local diary data...'
+          : 'Delete local photos; Google Drive backup will remain',
+      leadingIcon: Icons.delete_outline_rounded,
+      leadingColor: AppColors.error,
+      showChevron: !_isDeletingLocal,
+      trailing: _isDeletingLocal
+          ? const SizedBox(
+              width: 18.0,
+              height: 18.0,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.0,
+                color: AppColors.error,
+              ),
+            )
+          : null,
+      onTap: _isDeletingLocal ? null : _handleDeleteLocalDiary,
+    );
+  }
+
+  Widget _buildDeleteDriveBackupTile() {
+    return SettingsTile(
+      title: 'Delete Google Drive Backup',
+      subtitle: _isDeletingDrive
+          ? 'Deleting cloud backup...'
+          : 'Move cloud backup to Google Drive Trash',
+      leadingIcon: Icons.cloud_off_rounded,
+      leadingColor: AppColors.error,
+      showChevron: !_isDeletingDrive,
+      trailing: _isDeletingDrive
+          ? const SizedBox(
+              width: 18.0,
+              height: 18.0,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.0,
+                color: AppColors.error,
+              ),
+            )
+          : null,
+      onTap: _isDeletingDrive ? null : _handleDeleteDriveBackup,
+    );
+  }
+
+  Widget _buildCombinedDeleteTile() {
+    return SettingsTile(
+      title: 'Delete Local & Cloud Data',
+      subtitle: 'Remove local diary and Google Drive backup',
+      leadingIcon: Icons.delete_forever_rounded,
+      leadingColor: AppColors.error,
+      showChevron: true,
+      onTap: _handleCombinedDelete,
     );
   }
 }

@@ -60,6 +60,7 @@ class PhotoEntry {
   bool get hasRealImage => imagePath != null && imagePath!.isNotEmpty;
 
   /// Whether the image file actually exists on disk.
+  /// Falls back safely to false if nonexistent or inaccessible.
   bool get isImageFileAvailable {
     if (!hasRealImage) return false;
     try {
@@ -99,49 +100,82 @@ class PhotoEntry {
   }
 
   /// Reconstructs a [PhotoEntry] from a JSON map with 100% backward compatibility
-  /// for legacy records missing sync metadata.
+  /// and robust resilience against malformed fields, unexpected types, or missing keys.
   factory PhotoEntry.fromJson(Map<String, dynamic> json) {
-    final dateStr = json['date'] as String?;
-    final date = dateStr != null ? DateTime.parse(dateStr) : DateTime.now();
+    DateTime date;
+    final dateRaw = json['date'];
+    if (dateRaw is String) {
+      date = DateTime.tryParse(dateRaw) ?? DateTime.now();
+    } else {
+      date = DateTime.now();
+    }
 
-    final rawColors = json['gradientColors'] as List<dynamic>?;
+    // If dateKey is explicitly provided and valid, align date with dateKey
+    final dateKeyRaw = json['dateKey'];
+    if (dateKeyRaw is String) {
+      try {
+        final parsedKey = DateKey.parse(dateKeyRaw);
+        if (DateKey.fromDateTime(date) != parsedKey) {
+          date = parsedKey.toDateTime();
+        }
+      } catch (_) {}
+    }
+
+    final rawColors = json['gradientColors'];
     final List<Color> colors;
-    if (rawColors != null && rawColors.isNotEmpty) {
-      colors = rawColors.map((v) => Color((v as num).toInt())).toList();
+    if (rawColors is List && rawColors.isNotEmpty) {
+      final parsedColors = rawColors
+          .map((v) => v is num ? Color(v.toInt()) : null)
+          .whereType<Color>()
+          .toList();
+      colors = parsedColors.isNotEmpty
+          ? parsedColors
+          : const [Color(0xFFE28743), Color(0xFF873E23)];
     } else {
       colors = const [Color(0xFFE28743), Color(0xFF873E23)];
     }
 
-    final codePoint = json['iconCodePoint'] as int?;
-    final fontFamily = json['iconFontFamily'] as String?;
+    final rawCodePoint = json['iconCodePoint'];
+    final codePoint = rawCodePoint is num ? rawCodePoint.toInt() : null;
+    final fontFamily = json['iconFontFamily']?.toString();
     final icon = codePoint != null
         // ignore: non_const_argument_for_const_parameter
         ? IconData(codePoint, fontFamily: fontFamily ?? 'MaterialIcons')
         : Icons.photo_camera_rounded;
 
-    final syncStatusStr = json['syncStatus'] as String?;
+    final syncStatusStr = json['syncStatus']?.toString();
     final syncStatus = SyncStatus.fromJson(syncStatusStr);
 
-    final lastModStr = json['lastModifiedAt'] as String?;
-    final lastModifiedAt = lastModStr != null
-        ? DateTime.parse(lastModStr).toUtc()
-        : date.toUtc();
+    final lastModRaw = json['lastModifiedAt'];
+    final DateTime lastModifiedAt;
+    if (lastModRaw is String) {
+      lastModifiedAt = DateTime.tryParse(lastModRaw)?.toUtc() ?? date.toUtc();
+    } else {
+      lastModifiedAt = date.toUtc();
+    }
 
-    final driveFileId = json['driveFileId'] as String?;
-    final driveFileRevision = json['driveFileRevision'] as String?;
-    final syncError = json['syncError'] as String?;
-    final authorizedEmail = json['authorizedEmail'] as String?;
+    final title = json['title']?.toString() ?? 'Daily Capture';
+    final caption = json['caption']?.toString();
+    final location = json['location']?.toString();
+    final timeFormatted = json['timeFormatted']?.toString() ?? '12:00 PM';
+    final category = json['category']?.toString() ?? 'Daily Life';
+    final imagePath = json['imagePath']?.toString();
+    final driveFileId = json['driveFileId']?.toString();
+    final driveFileRevision = json['driveFileRevision']?.toString();
+    final syncError = json['syncError']?.toString();
+    final authorizedEmail =
+        (json['authorizedEmail'] ?? json['accountEmail'])?.toString();
 
     return PhotoEntry(
       date: date,
-      title: json['title'] as String? ?? 'Daily Capture',
-      caption: json['caption'] as String?,
-      location: json['location'] as String?,
-      timeFormatted: json['timeFormatted'] as String? ?? '12:00 PM',
+      title: title,
+      caption: caption,
+      location: location,
+      timeFormatted: timeFormatted,
       gradientColors: colors,
       icon: icon,
-      category: json['category'] as String? ?? 'Daily Life',
-      imagePath: json['imagePath'] as String?,
+      category: category,
+      imagePath: imagePath,
       syncStatus: syncStatus,
       lastModifiedAt: lastModifiedAt,
       driveFileId: driveFileId,
@@ -166,7 +200,9 @@ class PhotoEntry {
     SyncStatus? syncStatus,
     DateTime? lastModifiedAt,
     String? driveFileId,
+    bool clearDriveFileId = false,
     String? driveFileRevision,
+    bool clearDriveFileRevision = false,
     String? syncError,
     bool clearSyncError = false,
     String? authorizedEmail,
@@ -184,8 +220,10 @@ class PhotoEntry {
       imagePath: imagePath ?? this.imagePath,
       syncStatus: syncStatus ?? this.syncStatus,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
-      driveFileId: driveFileId ?? this.driveFileId,
-      driveFileRevision: driveFileRevision ?? this.driveFileRevision,
+      driveFileId: clearDriveFileId ? null : (driveFileId ?? this.driveFileId),
+      driveFileRevision: clearDriveFileRevision
+          ? null
+          : (driveFileRevision ?? this.driveFileRevision),
       syncError: clearSyncError ? null : (syncError ?? this.syncError),
       authorizedEmail: clearAuthorizedEmail
           ? null

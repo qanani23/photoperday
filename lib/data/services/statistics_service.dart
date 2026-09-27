@@ -140,6 +140,19 @@ class StatisticsService {
   /// Singleton instance of [StatisticsService].
   static final StatisticsService instance = StatisticsService._internal();
 
+  int? _memoizedStoreVersion;
+  DateKey? _memoizedTodayKey;
+  PersistentDailyPhotoStore? _memoizedStore;
+  StatisticsSummary? _memoizedSummary;
+
+  /// Clears internal memoization cache.
+  void clearCache() {
+    _memoizedStoreVersion = null;
+    _memoizedTodayKey = null;
+    _memoizedStore = null;
+    _memoizedSummary = null;
+  }
+
   /// Calculates a [StatisticsSummary] from the provided entries/keys or from
   /// [PersistentDailyPhotoStore.instance].
   ///
@@ -156,15 +169,25 @@ class StatisticsService {
         todayKey ??
         (todayDate != null ? DateKey.fromDateTime(todayDate) : DateKey.today());
 
+    final isFromStore = (dateKeys == null && entries == null);
+    final effectiveStore = store ?? PersistentDailyPhotoStore.instance;
+
+    if (isFromStore &&
+        _memoizedSummary != null &&
+        identical(_memoizedStore, effectiveStore) &&
+        _memoizedStoreVersion == effectiveStore.version &&
+        _memoizedTodayKey == effectiveTodayKey) {
+      return _memoizedSummary!;
+    }
+
     // 1. Gather candidate DateKeys
-    final candidateKeys = <DateKey>[];
+    final Iterable<DateKey> candidateKeys;
     if (dateKeys != null) {
-      candidateKeys.addAll(dateKeys);
+      candidateKeys = dateKeys;
     } else if (entries != null) {
-      candidateKeys.addAll(entries.map((e) => e.dateKey));
+      candidateKeys = entries.map((e) => e.dateKey);
     } else {
-      final effectiveStore = store ?? PersistentDailyPhotoStore.instance;
-      candidateKeys.addAll(effectiveStore.allEntries.map((e) => e.dateKey));
+      candidateKeys = effectiveStore.recordedDates;
     }
 
     // 2. Filter out future dates and deduplicate defensively
@@ -188,7 +211,7 @@ class StatisticsService {
       for (int m = 1; m <= 12; m++) {
         emptyMonths[m] = 0;
       }
-      return StatisticsSummary(
+      final summary = StatisticsSummary(
         totalPhotos: 0,
         totalRecordedDays: 0,
         currentStreak: 0,
@@ -199,6 +222,13 @@ class StatisticsService {
         currentYearCount: 0,
         monthlyCountsForCurrentYear: emptyMonths,
       );
+      if (isFromStore) {
+        _memoizedStore = effectiveStore;
+        _memoizedStoreVersion = effectiveStore.version;
+        _memoizedTodayKey = effectiveTodayKey;
+        _memoizedSummary = summary;
+      }
+      return summary;
     }
 
     // 4. Sort valid keys to determine earliest and latest recorded dates
@@ -224,7 +254,7 @@ class StatisticsService {
       }
     }
 
-    return StatisticsSummary(
+    final summary = StatisticsSummary(
       totalPhotos: streakSummary.totalRecordedDays,
       totalRecordedDays: streakSummary.totalRecordedDays,
       currentStreak: streakSummary.currentStreak,
@@ -235,5 +265,14 @@ class StatisticsService {
       currentYearCount: currentYearCount,
       monthlyCountsForCurrentYear: monthlyCounts,
     );
+
+    if (isFromStore) {
+      _memoizedStore = effectiveStore;
+      _memoizedStoreVersion = effectiveStore.version;
+      _memoizedTodayKey = effectiveTodayKey;
+      _memoizedSummary = summary;
+    }
+
+    return summary;
   }
 }

@@ -85,29 +85,34 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
   late PageController _pageController;
   int _currentIndex = 0;
   DateKey? _currentDateKey;
+  List<PhotoEntry> _entries = const [];
+  Set<DateKey>? _filterDateKeySet;
 
   @override
   void initState() {
     super.initState();
-    final entries = _getChronologicalEntries();
+    if (widget.filterDateKeys != null) {
+      _filterDateKeySet = widget.filterDateKeys!.toSet();
+    }
+    _updateEntries();
 
     if (widget.initialDateKey != null) {
-      final foundIndex = entries.indexWhere(
+      final foundIndex = _entries.indexWhere(
         (e) => e.dateKey == widget.initialDateKey,
       );
       if (foundIndex >= 0) {
         _currentIndex = foundIndex;
       } else {
         // Default to newest recorded day if specific key not present
-        _currentIndex = entries.isNotEmpty ? entries.length - 1 : 0;
+        _currentIndex = _entries.isNotEmpty ? _entries.length - 1 : 0;
       }
     } else {
       // Default to newest recorded day
-      _currentIndex = entries.isNotEmpty ? entries.length - 1 : 0;
+      _currentIndex = _entries.isNotEmpty ? _entries.length - 1 : 0;
     }
 
-    if (entries.isNotEmpty && _currentIndex < entries.length) {
-      _currentDateKey = entries[_currentIndex].dateKey;
+    if (_entries.isNotEmpty && _currentIndex < _entries.length) {
+      _currentDateKey = _entries[_currentIndex].dateKey;
     }
 
     _pageController = PageController(initialPage: _currentIndex);
@@ -126,10 +131,28 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
     super.dispose();
   }
 
+  void _updateEntries() {
+    final todayKey = DateKey.today();
+    final ascending = _store.chronologicalAscendingEntries;
+    if (_filterDateKeySet != null) {
+      _entries = ascending
+          .where(
+            (e) =>
+                e.dateKey.compareTo(todayKey) <= 0 &&
+                _filterDateKeySet!.contains(e.dateKey),
+          )
+          .toList(growable: false);
+    } else {
+      _entries = ascending
+          .where((e) => e.dateKey.compareTo(todayKey) <= 0)
+          .toList(growable: false);
+    }
+  }
+
   void _onStoreUpdated() {
     if (!mounted) return;
-    final newEntries = _getChronologicalEntries();
-    if (newEntries.isEmpty) {
+    _updateEntries();
+    if (_entries.isEmpty) {
       setState(() {
         _currentIndex = 0;
         _currentDateKey = null;
@@ -139,7 +162,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
 
     int newIndex = -1;
     if (_currentDateKey != null) {
-      newIndex = newEntries.indexWhere((e) => e.dateKey == _currentDateKey);
+      newIndex = _entries.indexWhere((e) => e.dateKey == _currentDateKey);
     }
 
     if (newIndex >= 0) {
@@ -150,39 +173,15 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
       }
     } else {
       // The current photo was deleted! Move to closest remaining entry
-      final clamped = _currentIndex.clamp(0, newEntries.length - 1);
+      final clamped = _currentIndex.clamp(0, _entries.length - 1);
       _currentIndex = clamped;
-      _currentDateKey = newEntries[clamped].dateKey;
+      _currentDateKey = _entries[clamped].dateKey;
       if (_pageController.hasClients) {
         _pageController.jumpToPage(clamped);
       }
     }
 
     setState(() {});
-  }
-
-  /// Retrieves all persisted photos, filters out future dates,
-  /// and sorts them chronologically from OLDEST to NEWEST.
-  ///
-  /// Index 0: Oldest recorded day
-  /// Index N - 1: Newest recorded day
-  ///
-  /// This ensures:
-  /// - Swipe Left (forward in index) → newer/next recorded day
-  /// - Swipe Right (backward in index) → older/previous recorded day
-  List<PhotoEntry> _getChronologicalEntries() {
-    final todayKey = DateKey.today();
-    final entries = _store.allEntries.where((entry) {
-      if (entry.dateKey.compareTo(todayKey) > 0) return false;
-      if (widget.filterDateKeys != null) {
-        return widget.filterDateKeys!.contains(entry.dateKey);
-      }
-      return true;
-    }).toList();
-
-    // Chronological order: oldest first, newest last
-    entries.sort((a, b) => a.dateKey.compareTo(b.dateKey));
-    return entries;
   }
 
   void _onPageChanged(int index, List<PhotoEntry> entries) {
@@ -267,8 +266,6 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final entries = _getChronologicalEntries();
-
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -278,9 +275,9 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
       child: Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(
-          child: entries.isEmpty
+          child: _entries.isEmpty
               ? _buildEmptyState()
-              : _buildSwipeViewer(entries),
+              : _buildSwipeViewer(_entries),
         ),
       ),
     );

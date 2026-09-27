@@ -39,9 +39,12 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
   PersistentDailyPhotoStore get _store =>
       widget.store ?? PersistentDailyPhotoStore.instance;
 
+  List<PhotoEntry> _entries = const [];
+
   @override
   void initState() {
     super.initState();
+    _updateEntries();
     _store.addListener(_onStoreUpdated);
     SyncWorker.instance.addListener(_onStoreUpdated);
     SyncCoordinator.instance.addListener(_onStoreUpdated);
@@ -57,22 +60,19 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
 
   void _onStoreUpdated() {
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _updateEntries();
+      });
     }
   }
 
-  /// Retrieves all persisted photos, filters out future dates and mock entries,
-  /// and sorts them chronologically with newest first.
-  List<PhotoEntry> _getChronologicalEntries() {
+  /// Updates cached entries from the store's memoized chronological collection,
+  /// filtering out future dates.
+  void _updateEntries() {
     final todayKey = DateKey.today();
-    final entries = _store.allEntries.where((entry) {
-      // Exclude future dates: entry must be on or before today
-      return entry.dateKey.compareTo(todayKey) <= 0;
-    }).toList();
-
-    // Newest first
-    entries.sort((a, b) => b.dateKey.compareTo(a.dateKey));
-    return entries;
+    _entries = _store.chronologicalEntries
+        .where((entry) => entry.dateKey.compareTo(todayKey) <= 0)
+        .toList(growable: false);
   }
 
   void _openDetail(PhotoEntry entry) {
@@ -144,8 +144,6 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final entries = _getChronologicalEntries();
-
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -159,13 +157,13 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Screen Header
-              _buildHeader(entries.length),
+              _buildHeader(_entries.length),
 
               // Content Area
               Expanded(
-                child: entries.isEmpty
+                child: _entries.isEmpty
                     ? _buildEmptyState()
-                    : _buildEntriesList(entries),
+                    : _buildEntriesList(_entries),
               ),
             ],
           ),
@@ -246,10 +244,11 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
               ),
               tooltip: 'Browse Days',
               onPressed: () {
-                final all = _getChronologicalEntries();
                 Navigator.of(context).pushNamed(
                   AppConstants.swipeDaysRoute,
-                  arguments: all.isNotEmpty ? all.first.dateKey : null,
+                  arguments: _entries.isNotEmpty
+                      ? _entries.first.dateKey
+                      : null,
                 );
               },
             ),

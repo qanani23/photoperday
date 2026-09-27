@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import 'package:photo_per_day/data/models/drive_folder_reference.dart';
@@ -335,11 +336,16 @@ class GoogleApisDriveAdapter implements DriveApiAdapter {
     }
   }
 
+  @visibleForTesting
+  DriveApiException mapErrorForTesting(Object error, String context) =>
+      _mapError(error, StackTrace.current, context);
+
   DriveApiException _mapError(Object error, StackTrace stack, String context) {
     if (error is DriveApiException) return error;
 
     if (error is drive.DetailedApiRequestError) {
       final status = error.status;
+      final msg = (error.message ?? '').toLowerCase();
       if (status == 401) {
         return DriveApiException(
           'Unauthorized Drive API request. Please re-authenticate.',
@@ -347,6 +353,21 @@ class GoogleApisDriveAdapter implements DriveApiAdapter {
           cause: error,
         );
       } else if (status == 403) {
+        if (msg.contains('quota') || msg.contains('storagequotaexceeded')) {
+          return DriveApiException(
+            'Google Drive storage quota exceeded. Your local photo is safe on your device.',
+            errorType: DriveFolderErrorType.forbidden,
+            cause: error,
+          );
+        }
+        if (msg.contains('ratelimit') ||
+            msg.contains('userratelimitexceeded')) {
+          return DriveApiException(
+            'Google Drive rate limit exceeded. Please wait before retrying.',
+            errorType: DriveFolderErrorType.forbidden,
+            cause: error,
+          );
+        }
         return DriveApiException(
           'Access forbidden. Check Google Drive permissions.',
           errorType: DriveFolderErrorType.forbidden,
@@ -356,6 +377,24 @@ class GoogleApisDriveAdapter implements DriveApiAdapter {
         return DriveApiException(
           'Target Drive resource not found.',
           errorType: DriveFolderErrorType.notFound,
+          cause: error,
+        );
+      } else if (status == 409) {
+        return DriveApiException(
+          'Conflict with existing Drive resource (HTTP 409).',
+          errorType: DriveFolderErrorType.apiError,
+          cause: error,
+        );
+      } else if (status == 429) {
+        return DriveApiException(
+          'Google Drive rate limit exceeded (HTTP 429). Please wait before retrying.',
+          errorType: DriveFolderErrorType.apiError,
+          cause: error,
+        );
+      } else if (status != null && status >= 500 && status < 600) {
+        return DriveApiException(
+          'Google Drive service is temporarily unavailable (HTTP $status). Will retry automatically.',
+          errorType: DriveFolderErrorType.apiError,
           cause: error,
         );
       }

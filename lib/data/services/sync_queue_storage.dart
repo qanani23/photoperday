@@ -58,16 +58,19 @@ class SyncQueueStorage {
       if (content.trim().isEmpty) return [];
 
       final decoded = jsonDecode(content);
-      if (decoded is! List<dynamic>) {
+      if (decoded is! List) {
         debugPrint('Sync queue file format unexpected (not a list): $decoded');
         return [];
       }
 
       final operations = <SyncOperation>[];
+      final seenIds = <String>{};
       for (final item in decoded) {
-        if (item is Map<String, dynamic>) {
+        if (item is Map) {
           try {
-            final op = SyncOperation.fromJson(item);
+            final op = SyncOperation.fromJson(Map<String, dynamic>.from(item));
+            if (seenIds.contains(op.id)) continue;
+            seenIds.add(op.id);
             // Automatic crash recovery: reset interrupted inProgress operations to pending
             if (op.status == SyncOperationStatus.inProgress) {
               operations.add(op.copyWith(status: SyncOperationStatus.pending));

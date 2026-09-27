@@ -41,6 +41,14 @@ class DateKey implements Comparable<DateKey> {
     return DateKey(year, month, day);
   }
 
+  /// Checks whether [year], [month], and [day] represent a valid Gregorian calendar date.
+  /// Correctly handles leap years and variable month lengths.
+  static bool isValidDate(int year, int month, int day) {
+    if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+    final dt = DateTime(year, month, day);
+    return dt.year == year && dt.month == month && dt.day == day;
+  }
+
   /// Formats this date as a normalized ISO date string 'YYYY-MM-DD'.
   String format() {
     final y = year.toString().padLeft(4, '0');

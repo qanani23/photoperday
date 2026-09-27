@@ -133,9 +133,16 @@ class _TodayScreenState extends State<TodayScreen> {
       } catch (e) {
         debugPrint('Failed to save today photo: $e');
         if (mounted) {
+          final String userMessage;
+          if (e is FileSystemException) {
+            userMessage =
+                'Unable to save photo due to a storage error. Please check available disk space.';
+          } else {
+            userMessage = 'Unable to save photo. Please try again.';
+          }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to save photo: $e'),
+              content: Text(userMessage),
               duration: const Duration(seconds: 3),
               behavior: SnackBarBehavior.floating,
               backgroundColor: AppColors.error,

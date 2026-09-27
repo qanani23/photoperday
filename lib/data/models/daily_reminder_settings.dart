@@ -40,12 +40,17 @@ class DailyReminderSettings {
     'minute': minute,
   };
 
-  /// Creates a [DailyReminderSettings] instance from a JSON map.
+  /// Creates a [DailyReminderSettings] instance from a JSON map, safely validating and clamping ranges.
   factory DailyReminderSettings.fromJson(Map<String, dynamic> json) {
+    final rawHour = (json['hour'] as num?)?.toInt() ?? 20;
+    final rawMinute = (json['minute'] as num?)?.toInt() ?? 0;
+    final hour = (rawHour >= 0 && rawHour <= 23) ? rawHour : 20;
+    final minute = (rawMinute >= 0 && rawMinute <= 59) ? rawMinute : 0;
+    final enabled = json['enabled'] == true;
     return DailyReminderSettings(
-      enabled: json['enabled'] as bool? ?? false,
-      hour: (json['hour'] as num?)?.toInt() ?? 20,
-      minute: (json['minute'] as num?)?.toInt() ?? 0,
+      enabled: enabled,
+      hour: hour,
+      minute: minute,
     );
   }
 

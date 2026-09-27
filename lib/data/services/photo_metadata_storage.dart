@@ -70,7 +70,7 @@ class PhotoMetadataStorage {
       if (content.trim().isEmpty) return {};
 
       final decoded = jsonDecode(content);
-      if (decoded is! Map<String, dynamic>) {
+      if (decoded is! Map) {
         debugPrint('Metadata file format unexpected: $decoded');
         return {};
       }
@@ -78,11 +78,15 @@ class PhotoMetadataStorage {
       final result = <DateKey, PhotoEntry>{};
       for (final entry in decoded.entries) {
         try {
-          final dateKey = DateKey.parse(entry.key);
+          final dateKey = DateKey.parse(entry.key.toString());
           final rawJson = entry.value;
-          if (rawJson is Map<String, dynamic>) {
-            final photoEntry = PhotoEntry.fromJson(rawJson);
-            // Ensure unique DateKey indexing
+          if (rawJson is Map) {
+            final jsonMap = Map<String, dynamic>.from(rawJson);
+            var photoEntry = PhotoEntry.fromJson(jsonMap);
+            // Enforce dateKey alignment to guarantee the one-photo-per-day invariant
+            if (photoEntry.dateKey != dateKey) {
+              photoEntry = photoEntry.copyWith(date: dateKey.toDateTime());
+            }
             result[dateKey] = photoEntry;
           }
         } catch (e) {
@@ -179,13 +183,13 @@ class PhotoMetadataStorage {
       if (content.trim().isEmpty) return [];
 
       final decoded = jsonDecode(content);
-      if (decoded is! List<dynamic>) return [];
+      if (decoded is! List) return [];
 
       final list = <SyncTombstone>[];
       for (final item in decoded) {
-        if (item is Map<String, dynamic>) {
+        if (item is Map) {
           try {
-            list.add(SyncTombstone.fromJson(item));
+            list.add(SyncTombstone.fromJson(Map<String, dynamic>.from(item)));
           } catch (e) {
             debugPrint('Skipping malformed tombstone: $e');
           }

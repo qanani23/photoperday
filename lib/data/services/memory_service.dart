@@ -28,15 +28,41 @@ class MemoryService {
     PersistentDailyPhotoStore? store,
   }) {
     final effectiveStore = store ?? PersistentDailyPhotoStore.instance;
-    final entries = sourceEntries ?? effectiveStore.allEntries;
     final todayKey = DateKey.today();
     final targetMonth = targetDate.month;
     final targetDay = targetDate.day;
     final targetYear = targetDate.year;
 
+    // Fast indexed path: when querying against the store, look up candidate historical years directly
+    if (sourceEntries == null) {
+      final recorded = effectiveStore.recordedDates;
+      if (recorded.isEmpty) return const [];
+
+      int minYear = targetYear;
+      for (final k in recorded) {
+        if (k.year < minYear) minYear = k.year;
+      }
+      if (minYear >= targetYear) return const [];
+
+      final memories = <PhotoEntry>[];
+      // Descending iteration: newest memory year first
+      for (int year = targetYear - 1; year >= minYear; year--) {
+        if (!DateKey.isValidDate(year, targetMonth, targetDay)) continue;
+        final candidateKey = DateKey(year, targetMonth, targetDay);
+        if (candidateKey.compareTo(todayKey) > 0) continue;
+
+        final entry = effectiveStore.getPhotoByKey(candidateKey);
+        if (entry != null) {
+          memories.add(entry);
+        }
+      }
+      return memories;
+    }
+
+    // Fallback path when an arbitrary custom sourceEntries list is passed
     final memories = <PhotoEntry>[];
 
-    for (final entry in entries) {
+    for (final entry in sourceEntries) {
       // 1. Exclude future dates relative to real-world today
       if (entry.dateKey.compareTo(todayKey) > 0) {
         continue;

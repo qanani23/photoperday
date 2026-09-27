@@ -340,9 +340,9 @@ class _PhotoDetailScreenState extends State<PhotoDetailScreen> {
         debugPrint('Failed to delete photo from detail screen: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete memory: $e'),
-              duration: const Duration(seconds: 3),
+            const SnackBar(
+              content: Text('Unable to delete memory. Please try again.'),
+              duration: Duration(seconds: 3),
               behavior: SnackBarBehavior.floating,
               backgroundColor: AppColors.error,
             ),

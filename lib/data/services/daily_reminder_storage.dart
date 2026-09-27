@@ -61,14 +61,14 @@ class DailyReminderStorage {
       }
 
       final dynamic decoded = jsonDecode(content);
-      if (decoded is! Map<String, dynamic>) {
+      if (decoded is! Map) {
         debugPrint(
           'Malformed daily_reminder_settings.json; returning defaults',
         );
         return DailyReminderSettings.defaultSettings;
       }
 
-      return DailyReminderSettings.fromJson(decoded);
+      return DailyReminderSettings.fromJson(Map<String, dynamic>.from(decoded));
     } catch (e) {
       debugPrint(
         'Error loading DailyReminderSettings: $e. Returning defaults.',

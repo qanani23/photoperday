@@ -8,6 +8,7 @@ import 'package:photo_per_day/data/models/sync_operation_type.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
 import 'package:photo_per_day/data/models/sync_tombstone.dart';
 import 'package:photo_per_day/data/services/daily_photo_rule.dart';
+import 'package:photo_per_day/data/services/local_storage_calculator.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
 import 'package:photo_per_day/data/services/sync_queue.dart';
@@ -73,6 +74,27 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   bool _isInitialized = false;
   Future<void>? _activeOp;
 
+  int _version = 0;
+
+  /// Monotonically increasing version counter incremented on every store mutation.
+  /// Used by dependent services (e.g. streaks, statistics) for zero-cost cache validation.
+  int get version => _version;
+
+  List<PhotoEntry>? _cachedAllEntries;
+  List<DateKey>? _cachedRecordedDates;
+  List<PhotoEntry>? _cachedChronologicalEntries;
+  List<PhotoEntry>? _cachedChronologicalAscendingEntries;
+  Set<DateKey>? _cachedPendingDeletionKeys;
+
+  void _invalidateCaches() {
+    _version++;
+    _cachedAllEntries = null;
+    _cachedRecordedDates = null;
+    _cachedChronologicalEntries = null;
+    _cachedChronologicalAscendingEntries = null;
+    _cachedPendingDeletionKeys = null;
+  }
+
   /// Whether the store has completed loading its persisted records from disk.
   bool get isInitialized => _isInitialized;
 
@@ -87,8 +109,12 @@ class PersistentDailyPhotoStore extends ChangeNotifier
       List.unmodifiable(_pendingDeletions);
 
   /// Checks if there is a pending cloud deletion tombstone for [dateKey].
-  bool hasPendingDeletion(DateKey dateKey) =>
-      _pendingDeletions.any((tombstone) => tombstone.dateKey == dateKey);
+  bool hasPendingDeletion(DateKey dateKey) {
+    _cachedPendingDeletionKeys ??= _pendingDeletions
+        .map((t) => t.dateKey)
+        .toSet();
+    return _cachedPendingDeletionKeys!.contains(dateKey);
+  }
 
   /// Lightweight sequential FIFO executor ensuring that persistent mutations
   /// never race against each other, even under rapid consecutive calls.
@@ -161,14 +187,17 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     _pendingDeletions.clear();
     _pendingDeletions.addAll(loadedDeletions);
 
-    // Crash recovery: ensure all restored pending deletions have a corresponding delete op in the queue
+    // Crash recovery: ensure all restored pending deletions have a corresponding delete op in the queue.
+    // Index existing delete ops for O(1) checks across large queues.
+    final existingDeleteIds = _syncQueue.operations
+        .where(
+          (op) => op.type == SyncOperationType.delete && op.driveFileId != null,
+        )
+        .map((op) => op.driveFileId!)
+        .toSet();
+
     for (final tombstone in _pendingDeletions) {
-      final hasOp = _syncQueue.operations.any(
-        (op) =>
-            op.type == SyncOperationType.delete &&
-            op.driveFileId == tombstone.driveFileId,
-      );
-      if (!hasOp) {
+      if (!existingDeleteIds.contains(tombstone.driveFileId)) {
         await _syncQueue.enqueueDelete(
           tombstone.dateKey,
           driveFileId: tombstone.driveFileId,
@@ -178,6 +207,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     }
 
     _isInitialized = true;
+    _invalidateCaches();
 
     // Clean up any unreferenced orphan files from previous interrupted operations.
     // Non-critical startup cleanup failures must never prevent the app from launching.
@@ -217,10 +247,34 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   int get count => _entries.length;
 
   /// Unmodifiable view of all stored photo entries.
-  List<PhotoEntry> get allEntries => List.unmodifiable(_entries.values);
+  List<PhotoEntry> get allEntries =>
+      _cachedAllEntries ??= List.unmodifiable(_entries.values);
 
   /// Unmodifiable view of all recorded DateKeys.
-  List<DateKey> get recordedDates => List.unmodifiable(_entries.keys);
+  List<DateKey> get recordedDates =>
+      _cachedRecordedDates ??= List.unmodifiable(_entries.keys);
+
+  /// Chronological entries ordered newest-to-oldest (descending).
+  /// Memoized until store contents change.
+  List<PhotoEntry> get chronologicalEntries {
+    if (_cachedChronologicalEntries != null) {
+      return _cachedChronologicalEntries!;
+    }
+    final list = _entries.values.toList()
+      ..sort((a, b) => b.dateKey.compareTo(a.dateKey));
+    return _cachedChronologicalEntries = List.unmodifiable(list);
+  }
+
+  /// Chronological entries ordered oldest-to-newest (ascending).
+  /// Memoized until store contents change.
+  List<PhotoEntry> get chronologicalAscendingEntries {
+    if (_cachedChronologicalAscendingEntries != null) {
+      return _cachedChronologicalAscendingEntries!;
+    }
+    final list = _entries.values.toList()
+      ..sort((a, b) => a.dateKey.compareTo(b.dateKey));
+    return _cachedChronologicalAscendingEntries = List.unmodifiable(list);
+  }
 
   /// Saves or replaces a photo with full persistence lifecycle handling:
   /// 1. Pre-validates source photo file (must exist and be non-empty).
@@ -351,6 +405,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
 
     // Update in-memory cache
     _entries[key] = updatedEntry;
+    _invalidateCaches();
     notifyListeners();
     return updatedEntry;
   }
@@ -446,6 +501,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     }
 
     _entries[dateKey] = updated;
+    _invalidateCaches();
     notifyListeners();
     return updated;
   }
@@ -496,6 +552,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
       }
 
       _entries[dateKey] = updated;
+      _invalidateCaches();
       notifyListeners();
       return updated;
     });
@@ -507,6 +564,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     final oldEntry = _entries[key];
 
     _entries[key] = entry;
+    _invalidateCaches();
     notifyListeners();
 
     // Trigger async background persistence with rollback on failure
@@ -542,6 +600,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
         } else {
           _entries.remove(key);
         }
+        _invalidateCaches();
         notifyListeners();
       });
     }
@@ -570,6 +629,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     if (oldEntry == null) return;
 
     _entries.remove(key);
+    _invalidateCaches();
     notifyListeners();
 
     if (_isInitialized) {
@@ -589,6 +649,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
             authorizedEmail: oldEntry.authorizedEmail,
           );
           _pendingDeletions.add(tombstone);
+          _invalidateCaches();
           await _metadataStorage.savePendingDeletions(_pendingDeletions);
           await _syncQueue.enqueueDelete(
             key,
@@ -604,6 +665,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
           'Background metadata save after remove error, rolling back: $e',
         );
         _entries[key] = oldEntry;
+        _invalidateCaches();
         notifyListeners();
       });
     }
@@ -656,6 +718,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     }
 
     _entries.remove(key);
+    _invalidateCaches();
     notifyListeners();
   }
 
@@ -665,6 +728,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   Future<void> acknowledgePendingDeletion(String driveFileId) {
     return _runSequential(() async {
       _pendingDeletions.removeWhere((t) => t.driveFileId == driveFileId);
+      _invalidateCaches();
       if (_isInitialized) {
         await _metadataStorage.savePendingDeletions(_pendingDeletions);
         SyncOperation? deleteOp;
@@ -686,6 +750,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   Future<void> clearPendingDeletions() {
     return _runSequential(() async {
       _pendingDeletions.clear();
+      _invalidateCaches();
       if (_isInitialized) {
         await _metadataStorage.clearPendingDeletions();
       }
@@ -717,6 +782,8 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   void clear() {
     _entries.clear();
     _pendingDeletions.clear();
+    LocalStorageCalculator.clearCache();
+    _invalidateCaches();
     notifyListeners();
     if (_isInitialized) {
       _runSequential(() async {
@@ -734,11 +801,81 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     return _runSequential(() async {
       _entries.clear();
       _pendingDeletions.clear();
+      LocalStorageCalculator.clearCache();
+      _invalidateCaches();
       if (_isInitialized) {
         await _metadataStorage.clear();
         await _fileManager.clearAll();
         await _syncQueue.clear();
       }
+      notifyListeners();
+    });
+  }
+
+  /// Permanently removes all local diary data from the device:
+  /// - All local photo files in managed storage
+  /// - All local photo metadata
+  /// - All pending sync queue operations
+  /// - All pending deletion tombstones
+  ///
+  /// CRITICAL GUARANTEES:
+  /// - Does NOT delete or trash any photos from Google Drive.
+  /// - Does NOT enqueue any remote deletion operations to the sync queue.
+  /// - The user's Google Drive backup remains completely intact.
+  /// - Unrelated app preferences (notifications, theme, week start) are untouched.
+  Future<void> deleteLocalDiary() async {
+    await clearAsync();
+  }
+
+  /// Updates local photo entries and sync queue when the user explicitly deletes
+  /// their Google Drive backup from the cloud.
+  ///
+  /// CRITICAL GUARANTEES:
+  /// - Local photo files on disk remain completely intact.
+  /// - All photo entries that had a remote [driveFileId] matching [authorizedEmail]
+  ///   (or all entries if [authorizedEmail] is omitted) have their cloud references
+  ///   cleared and transition cleanly to [SyncStatus.localOnly].
+  /// - Pending deletion tombstones are cleared since remote files are gone.
+  /// - Pending sync operations for this email/folder are pruned from the queue.
+  Future<void> onCloudBackupDeleted({String? authorizedEmail}) {
+    return _runSequential(() async {
+      bool changed = false;
+      for (final entry in _entries.values.toList()) {
+        final matchesEmail =
+            authorizedEmail == null ||
+            entry.authorizedEmail == null ||
+            entry.authorizedEmail == authorizedEmail;
+        if (matchesEmail &&
+            (entry.driveFileId != null ||
+                entry.syncStatus != SyncStatus.localOnly)) {
+          final updated = entry.copyWith(
+            syncStatus: SyncStatus.localOnly,
+            clearDriveFileId: true,
+            clearDriveFileRevision: true,
+            clearSyncError: true,
+            clearAuthorizedEmail: true,
+          );
+          _entries[entry.dateKey] = updated;
+          changed = true;
+        }
+      }
+
+      _pendingDeletions.removeWhere(
+        (t) =>
+            authorizedEmail == null ||
+            t.authorizedEmail == null ||
+            t.authorizedEmail == authorizedEmail,
+      );
+
+      if (_isInitialized) {
+        if (changed) {
+          await _metadataStorage.saveAll(_entries);
+        }
+        await _metadataStorage.savePendingDeletions(_pendingDeletions);
+        await _syncQueue.clear();
+      }
+
+      _invalidateCaches();
       notifyListeners();
     });
   }

@@ -66,6 +66,19 @@ class StreakService {
   /// Singleton instance of [StreakService].
   static final StreakService instance = StreakService._internal();
 
+  int? _memoizedStoreVersion;
+  DateKey? _memoizedTodayKey;
+  PersistentDailyPhotoStore? _memoizedStore;
+  StreakSummary? _memoizedSummary;
+
+  /// Clears internal memoization cache.
+  void clearCache() {
+    _memoizedStoreVersion = null;
+    _memoizedTodayKey = null;
+    _memoizedStore = null;
+    _memoizedSummary = null;
+  }
+
   /// Calculates a [StreakSummary] from the provided entries/keys or from
   /// [PersistentDailyPhotoStore.instance].
   ///
@@ -81,15 +94,25 @@ class StreakService {
         todayKey ??
         (todayDate != null ? DateKey.fromDateTime(todayDate) : DateKey.today());
 
-    // 1. Gather all candidate DateKeys
-    final candidateKeys = <DateKey>[];
+    final isFromStore = (dateKeys == null && entries == null);
+    final effectiveStore = store ?? PersistentDailyPhotoStore.instance;
+
+    if (isFromStore &&
+        _memoizedSummary != null &&
+        identical(_memoizedStore, effectiveStore) &&
+        _memoizedStoreVersion == effectiveStore.version &&
+        _memoizedTodayKey == effectiveTodayKey) {
+      return _memoizedSummary!;
+    }
+
+    // 1. Gather candidate DateKeys
+    final Iterable<DateKey> candidateKeys;
     if (dateKeys != null) {
-      candidateKeys.addAll(dateKeys);
+      candidateKeys = dateKeys;
     } else if (entries != null) {
-      candidateKeys.addAll(entries.map((e) => e.dateKey));
+      candidateKeys = entries.map((e) => e.dateKey);
     } else {
-      final effectiveStore = store ?? PersistentDailyPhotoStore.instance;
-      candidateKeys.addAll(effectiveStore.allEntries.map((e) => e.dateKey));
+      candidateKeys = effectiveStore.recordedDates;
     }
 
     // 2. Filter out future dates and deduplicate defensively
@@ -101,7 +124,14 @@ class StreakService {
     }
 
     if (validKeys.isEmpty) {
-      return StreakSummary.zero;
+      const summary = StreakSummary.zero;
+      if (isFromStore) {
+        _memoizedStore = effectiveStore;
+        _memoizedStoreVersion = effectiveStore.version;
+        _memoizedTodayKey = effectiveTodayKey;
+        _memoizedSummary = summary;
+      }
+      return summary;
     }
 
     final totalRecordedDays = validKeys.length;
@@ -136,10 +166,19 @@ class StreakService {
       }
     }
 
-    return StreakSummary(
+    final summary = StreakSummary(
       currentStreak: currentStreak,
       longestStreak: longestStreak,
       totalRecordedDays: totalRecordedDays,
     );
+
+    if (isFromStore) {
+      _memoizedStore = effectiveStore;
+      _memoizedStoreVersion = effectiveStore.version;
+      _memoizedTodayKey = effectiveTodayKey;
+      _memoizedSummary = summary;
+    }
+
+    return summary;
   }
 }

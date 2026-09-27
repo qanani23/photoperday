@@ -19,6 +19,20 @@ class LocalStorageCalculator {
   static int storageWarningThresholdBytes =
       AppConstants.photoStorageWarningThresholdBytes;
 
+  /// In-memory cache of file sizes keyed by normalized file path.
+  /// Managed photo files are immutable, so once read, their length is stable.
+  static final Map<String, int> _fileSizeCache = {};
+
+  /// Clears the internal file size cache.
+  static void clearCache() {
+    _fileSizeCache.clear();
+  }
+
+  /// Removes an entry from the cache when a file is deleted.
+  static void invalidatePath(String path) {
+    _fileSizeCache.remove(path.trim());
+  }
+
   /// Checks whether local photo storage exceeds the warning threshold.
   static bool isStorageWarning({required int bytes, int? customThreshold}) {
     final threshold = customThreshold ?? storageWarningThresholdBytes;
@@ -43,15 +57,25 @@ class LocalStorageCalculator {
         continue;
       }
 
+      final cached = _fileSizeCache[normalizedPath];
+      if (cached != null) {
+        totalBytes += cached;
+        continue;
+      }
+
       try {
         final file = File(normalizedPath);
         if (await file.exists()) {
           final length = await file.length();
           if (length > 0) {
+            _fileSizeCache[normalizedPath] = length;
             totalBytes += length;
           }
+        } else {
+          _fileSizeCache.remove(normalizedPath);
         }
       } catch (e) {
+        _fileSizeCache.remove(normalizedPath);
         // File system errors, permission issues, or file-locked exceptions
         // are caught safely so one unreadable file never crashes the calculation.
         debugPrint(
@@ -78,15 +102,25 @@ class LocalStorageCalculator {
       final normalizedPath = path.trim();
       if (!processedPaths.add(normalizedPath)) continue;
 
+      final cached = _fileSizeCache[normalizedPath];
+      if (cached != null) {
+        totalBytes += cached;
+        continue;
+      }
+
       try {
         final file = File(normalizedPath);
         if (file.existsSync()) {
           final length = file.lengthSync();
           if (length > 0) {
+            _fileSizeCache[normalizedPath] = length;
             totalBytes += length;
           }
+        } else {
+          _fileSizeCache.remove(normalizedPath);
         }
       } catch (_) {
+        _fileSizeCache.remove(normalizedPath);
         // Ignored safely
       }
     }
