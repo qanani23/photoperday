@@ -176,8 +176,8 @@ class SyncOperation {
       nextAttemptAt: nextAttempt,
       lastError: json['lastError']?.toString(),
       driveFileId: json['driveFileId']?.toString(),
-      authorizedEmail:
-          (json['authorizedEmail'] ?? json['accountEmail'])?.toString(),
+      authorizedEmail: (json['authorizedEmail'] ?? json['accountEmail'])
+          ?.toString(),
     );
   }
 

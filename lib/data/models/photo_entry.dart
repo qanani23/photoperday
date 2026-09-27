@@ -163,8 +163,8 @@ class PhotoEntry {
     final driveFileId = json['driveFileId']?.toString();
     final driveFileRevision = json['driveFileRevision']?.toString();
     final syncError = json['syncError']?.toString();
-    final authorizedEmail =
-        (json['authorizedEmail'] ?? json['accountEmail'])?.toString();
+    final authorizedEmail = (json['authorizedEmail'] ?? json['accountEmail'])
+        ?.toString();
 
     return PhotoEntry(
       date: date,

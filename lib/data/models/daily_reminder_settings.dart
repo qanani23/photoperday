@@ -47,11 +47,7 @@ class DailyReminderSettings {
     final hour = (rawHour >= 0 && rawHour <= 23) ? rawHour : 20;
     final minute = (rawMinute >= 0 && rawMinute <= 59) ? rawMinute : 0;
     final enabled = json['enabled'] == true;
-    return DailyReminderSettings(
-      enabled: enabled,
-      hour: hour,
-      minute: minute,
-    );
+    return DailyReminderSettings(enabled: enabled, hour: hour, minute: minute);
   }
 
   /// Creates a copy with optional updated fields.
