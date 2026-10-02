@@ -1,0 +1,6 @@
+# Template for key.properties - do NOT commit real credentials or keys to source control!
+# Copy this file to key.properties and fill in the values.
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=photoaday-upload
+storeFile=upload-keystore.jks

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1069947159482",
+    "project_id": "photo-a-day-a8d56",
+    "storage_bucket": "photo-a-day-a8d56.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1069947159482:android:96200be2b5c68da1901383",
+        "android_client_info": {
+          "package_name": "com.photoaday.photo_per_day"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBk_PjNc7N7kDWCyXrrI_c_WO-MvUAB-0Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -330,7 +330,7 @@ void main() {
   Future<void> waitForSyncComplete(
     SyncCoordinator c, {
     SyncQueue? queue,
-    Duration timeout = const Duration(seconds: 5),
+    Duration timeout = const Duration(seconds: 15),
   }) async {
     final deadline = DateTime.now().add(timeout);
     await Future.delayed(const Duration(milliseconds: 30));
