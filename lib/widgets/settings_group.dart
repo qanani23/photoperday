@@ -23,7 +23,7 @@ class SettingsGroup extends StatelessWidget {
             padding: const EdgeInsets.only(left: 4.0, bottom: AppSpacing.xs),
             child: Text(
               title!.toUpperCase(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.0,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textMuted,
@@ -45,7 +45,7 @@ class SettingsGroup extends StatelessWidget {
               for (int i = 0; i < children.length; i++) ...[
                 children[i],
                 if (i < children.length - 1)
-                  const Divider(
+                  Divider(
                     height: 1.0,
                     thickness: 0.8,
                     indent: AppSpacing.md,

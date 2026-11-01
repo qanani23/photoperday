@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
+import 'package:photo_per_day/data/models/sync_status.dart';
 import 'package:photo_per_day/data/services/statistics_service.dart';
 import 'package:photo_per_day/data/services/streak_service.dart';
 
@@ -318,6 +319,7 @@ void main() {
           const DateKey(2026, 3, 18),
           const DateKey(2026, 3, 19),
         ],
+        allowYesterdayActive: false,
       );
 
       final streakSummary = StreakService.instance.calculateStreak(
@@ -327,10 +329,25 @@ void main() {
           const DateKey(2026, 3, 18),
           const DateKey(2026, 3, 19),
         ],
+        allowYesterdayActive: false,
       );
 
       expect(summary.currentStreak, equals(streakSummary.currentStreak));
       expect(summary.currentStreak, 0);
+    });
+
+    test('15b. Statistics preserves active yesterday streak (M44)', () {
+      final summary = StatisticsService.instance.calculateStatistics(
+        todayKey: today,
+        dateKeys: [
+          const DateKey(2026, 3, 17),
+          const DateKey(2026, 3, 18),
+          const DateKey(2026, 3, 19),
+        ],
+      );
+
+      expect(summary.currentStreak, 3);
+      expect(summary.isCurrentStreakActive, isTrue);
     });
 
     test('16. Statistics reuses correct longest streak from StreakService', () {
@@ -407,6 +424,103 @@ void main() {
       expect(summary1, equals(summary2));
       expect(summary1.hashCode, equals(summary2.hashCode));
       expect(summary1.toString(), contains('StatisticsSummary'));
+    });
+
+    test('M50: Weekday distribution is computed accurately', () {
+      // March 16 (Mon), March 17 (Tue), March 18 (Wed), March 19 (Thu), March 20 (Fri) 2026
+      final dateKeys = [
+        const DateKey(2026, 3, 16), // Mon
+        const DateKey(2026, 3, 17), // Tue
+        const DateKey(2026, 3, 18), // Wed
+        const DateKey(2026, 3, 19), // Thu
+        const DateKey(2026, 3, 20), // Fri
+      ];
+
+      final summary = StatisticsService.instance.calculateStatistics(
+        todayKey: today,
+        dateKeys: dateKeys,
+      );
+
+      expect(summary.weekdayCounts[DateTime.monday], 1);
+      expect(summary.weekdayCounts[DateTime.tuesday], 1);
+      expect(summary.weekdayCounts[DateTime.wednesday], 1);
+      expect(summary.weekdayCounts[DateTime.thursday], 1);
+      expect(summary.weekdayCounts[DateTime.friday], 1);
+      expect(summary.weekdayCounts[DateTime.saturday], 0);
+      expect(summary.weekdayCounts[DateTime.sunday], 0);
+    });
+
+    test(
+      'M50: Statistics include localOnly, pending, failed, and synced entries',
+      () {
+        final entries = [
+          PhotoEntry(
+            date: DateTime(2026, 3, 17),
+            title: 'Local',
+            syncStatus: SyncStatus.localOnly,
+            gradientColors: const [],
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 18),
+            title: 'Pending',
+            syncStatus: SyncStatus.pending,
+            gradientColors: const [],
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 19),
+            title: 'Failed',
+            syncStatus: SyncStatus.failed,
+            syncError: 'Network timeout',
+            gradientColors: const [],
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 20),
+            title: 'Synced',
+            syncStatus: SyncStatus.synced,
+            driveFileId: 'drive_123',
+            authorizedEmail: 'user@example.com',
+            gradientColors: const [],
+          ),
+        ];
+
+        final summary = StatisticsService.instance.calculateStatistics(
+          todayKey: today,
+          entries: entries,
+        );
+
+        expect(summary.totalPhotos, 4);
+        expect(summary.totalRecordedDays, 4);
+        expect(summary.currentStreak, 4);
+        expect(summary.longestStreak, 4);
+        expect(summary.currentMonthCount, 4);
+        expect(summary.currentYearCount, 4);
+      },
+    );
+
+    test('M50: Statistics handle missing local image files safely', () {
+      final entries = [
+        PhotoEntry(
+          date: DateTime(2026, 3, 19),
+          title: 'Missing image 1',
+          imagePath: '/path/does/not/exist_1.jpg',
+          gradientColors: const [],
+        ),
+        PhotoEntry(
+          date: DateTime(2026, 3, 20),
+          title: 'Missing image 2',
+          imagePath: '/path/does/not/exist_2.jpg',
+          gradientColors: const [],
+        ),
+      ];
+
+      final summary = StatisticsService.instance.calculateStatistics(
+        todayKey: today,
+        entries: entries,
+      );
+
+      expect(summary.totalPhotos, 2);
+      expect(summary.totalRecordedDays, 2);
+      expect(summary.currentStreak, 2);
     });
   });
 }

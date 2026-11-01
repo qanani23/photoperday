@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:photo_per_day/core/theme/app_colors.dart';
+import 'package:photo_per_day/data/services/app_theme_service.dart';
 import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_shadows.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
@@ -53,11 +55,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   void initState() {
     super.initState();
     _store.addListener(_onStoreUpdated);
+    AppThemeService.instance.addListener(_onStoreUpdated);
   }
 
   @override
   void dispose() {
     _store.removeListener(_onStoreUpdated);
+    AppThemeService.instance.removeListener(_onStoreUpdated);
     super.dispose();
   }
 
@@ -95,14 +99,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final newEntry = PhotoEntry(
         date: now,
         title: 'Daily Capture',
-        caption: 'Captured moment from today.',
         location: source == PhotoSource.camera
             ? 'Camera Capture'
             : 'Photo Library',
         timeFormatted: formattedTime,
         imagePath: capturedPath,
         icon: Icons.camera_alt_rounded,
-        gradientColors: const [AppColors.accent, AppColors.surfaceDark],
+        gradientColors: [AppColors.accent, AppColors.surfaceDark],
       );
 
       try {
@@ -123,47 +126,65 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final summary = StatisticsService.instance.calculateStatistics(
-      store: _store,
-      todayKey: _effectiveTodayKey,
-    );
+    return ListenableBuilder(
+      listenable: Listenable.merge([_store, AppThemeService.instance]),
+      builder: (context, _) {
+        final summary = StatisticsService.instance.calculateStatistics(
+          store: _store,
+          todayKey: _effectiveTodayKey,
+        );
+        final isDark = AppColors.current.isDark;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.pageHorizontal,
-            AppSpacing.sm,
-            AppSpacing.pageHorizontal,
-            AppSpacing.dockClearanceExtended,
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: isDark
+                ? Brightness.light
+                : Brightness.dark,
+            statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: AppSpacing.md),
+          child: Scaffold(
+            backgroundColor: AppColors.background,
+            body: SafeArea(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pageHorizontal,
+                  AppSpacing.sm,
+                  AppSpacing.pageHorizontal,
+                  AppSpacing.dockClearanceExtended,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: AppSpacing.md),
 
-              if (!summary.hasPhotos) ...[
-                _buildEmptyStateCta(),
-                const SizedBox(height: AppSpacing.md),
-              ],
+                    if (!summary.hasPhotos) ...[
+                      _buildEmptyStateCta(),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
 
-              _buildOverviewCard(summary),
-              const SizedBox(height: AppSpacing.md),
+                    _buildOverviewCard(summary),
+                    const SizedBox(height: AppSpacing.md),
 
-              _buildMilestonesCard(summary),
-              const SizedBox(height: AppSpacing.md),
+                    _buildStreakInsightsCard(summary),
+                    const SizedBox(height: AppSpacing.md),
 
-              _buildTimeBreakdownCard(summary),
-              const SizedBox(height: AppSpacing.md),
+                    _buildMilestonesCard(summary),
+                    const SizedBox(height: AppSpacing.md),
 
-              _buildMonthlyActivityCard(summary),
-            ],
+                    _buildTimeBreakdownCard(summary),
+                    const SizedBox(height: AppSpacing.md),
+
+                    _buildMonthlyActivityCard(summary),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -172,7 +193,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Row(
       children: [
         IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_rounded,
             color: AppColors.textPrimary,
             size: 22.0,
@@ -181,13 +202,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           onPressed: () => Navigator.maybePop(context),
         ),
         const SizedBox(width: AppSpacing.xs),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Statistics', style: AppTypography.appTitle),
-              SizedBox(height: 2.0),
+              const SizedBox(height: 2.0),
               Text('YOUR PHOTO JOURNEY', style: AppTypography.appTagline),
             ],
           ),
@@ -217,15 +238,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               shape: BoxShape.circle,
               border: Border.all(color: AppColors.border, width: 0.8),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.auto_stories_outlined,
               color: AppColors.accent,
               size: 22.0,
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          const Text(
-            'Begin your Photo a Day journey',
+          Text(
+            'Begin your Daria journey',
             style: TextStyle(
               fontSize: 15.0,
               fontWeight: FontWeight.w700,
@@ -233,7 +254,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ),
           ),
           const SizedBox(height: 4.0),
-          const Text(
+          Text(
             'Capture your first daily photo to start tracking streaks and memories.',
             style: TextStyle(
               fontSize: 12.5,
@@ -249,8 +270,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             icon: const Icon(Icons.camera_alt_outlined, size: 16.0),
             label: const Text("Capture Today's Photo"),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.textPrimary,
-              foregroundColor: AppColors.surface,
+              backgroundColor: AppColors.primaryButtonBackground,
+              foregroundColor: AppColors.primaryButtonForeground,
               elevation: 0,
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.md,
@@ -284,7 +305,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('OVERVIEW', style: AppTypography.appTagline),
+          Text('OVERVIEW', style: AppTypography.appTagline),
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
@@ -374,7 +395,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           const SizedBox(height: 6.0),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18.0,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -384,11 +405,101 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           const SizedBox(height: 2.0),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w500,
               color: AppColors.textMuted,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Streak insights card (Completed Streaks, Average Streak, Longest Gap, Most Active Month)
+  Widget _buildStreakInsightsCard(StatisticsSummary summary) {
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final activeMonthText = summary.mostActiveMonth != null
+        ? '${monthNames[summary.mostActiveMonth! - 1]} (${summary.mostActiveMonthCount})'
+        : 'None';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadii.card,
+        border: Border.all(color: AppColors.border, width: 0.8),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('STREAK INSIGHTS', style: AppTypography.appTagline),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricTile(
+                  key: const Key('stat_ended_streaks'),
+                  value: '${summary.endedStreakCount}',
+                  label: 'Ended Streaks',
+                  icon: Icons.check_circle_outline_rounded,
+                  color: AppColors.statDaysGreen,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _buildMetricTile(
+                  key: const Key('stat_avg_streak'),
+                  value: summary.averageStreakLength > 0
+                      ? '${summary.averageStreakLength} d'
+                      : '0 d',
+                  label: 'Average Run',
+                  icon: Icons.timeline_rounded,
+                  color: AppColors.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricTile(
+                  key: const Key('stat_longest_gap'),
+                  value: summary.longestGapDays == 1
+                      ? '1 day'
+                      : '${summary.longestGapDays} days',
+                  label: 'Longest Gap',
+                  icon: Icons.space_bar_rounded,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _buildMetricTile(
+                  key: const Key('stat_active_month'),
+                  value: activeMonthText,
+                  label: 'Peak Month',
+                  icon: Icons.star_border_rounded,
+                  color: AppColors.statStreakOrange,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -409,7 +520,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('JOURNEY MILESTONES', style: AppTypography.appTagline),
+          Text('JOURNEY MILESTONES', style: AppTypography.appTagline),
           const SizedBox(height: AppSpacing.sm),
           _buildMilestoneRow(
             label: 'First Photo',
@@ -417,8 +528,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             icon: Icons.flight_takeoff_rounded,
             iconColor: AppColors.statIconBrown,
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
             child: Divider(color: AppColors.borderSubtle, height: 1.0),
           ),
           _buildMilestoneRow(
@@ -457,7 +568,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             children: [
               Text(
                 label.toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textMuted,
@@ -467,7 +578,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               const SizedBox(height: 2.0),
               Text(
                 dateText,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
@@ -494,7 +605,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('TIME BREAKDOWN', style: AppTypography.appTagline),
+          Text('TIME BREAKDOWN', style: AppTypography.appTagline),
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
@@ -509,7 +620,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'THIS MONTH',
                         style: TextStyle(
                           fontSize: 10.5,
@@ -523,7 +634,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         summary.currentMonthCount == 1
                             ? '1 photo'
                             : '${summary.currentMonthCount} photos',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16.0,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
@@ -546,7 +657,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'THIS YEAR',
                         style: TextStyle(
                           fontSize: 10.5,
@@ -560,7 +671,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         summary.currentYearCount == 1
                             ? '1 photo'
                             : '${summary.currentYearCount} photos',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16.0,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
@@ -618,7 +729,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               Text('MONTHLY ACTIVITY ($year)', style: AppTypography.appTagline),
               Text(
                 '${summary.currentYearCount} total',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11.0,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textMuted,

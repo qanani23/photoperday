@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_per_day/core/constants/app_constants.dart';
+import 'package:photo_per_day/core/layout/app_breakpoints.dart';
 import 'package:photo_per_day/core/theme/app_colors.dart';
 import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
+import 'package:photo_per_day/data/services/app_theme_service.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
-import 'package:photo_per_day/data/services/sync_coordinator.dart';
-import 'package:photo_per_day/data/services/sync_worker.dart';
 import 'package:photo_per_day/screens/camera/camera_screen.dart';
 import 'package:photo_per_day/services/gallery_photo_service.dart';
 import 'package:photo_per_day/widgets/photo_source_sheet.dart';
@@ -46,15 +46,13 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
     super.initState();
     _updateEntries();
     _store.addListener(_onStoreUpdated);
-    SyncWorker.instance.addListener(_onStoreUpdated);
-    SyncCoordinator.instance.addListener(_onStoreUpdated);
+    AppThemeService.instance.addListener(_onStoreUpdated);
   }
 
   @override
   void dispose() {
     _store.removeListener(_onStoreUpdated);
-    SyncWorker.instance.removeListener(_onStoreUpdated);
-    SyncCoordinator.instance.removeListener(_onStoreUpdated);
+    AppThemeService.instance.removeListener(_onStoreUpdated);
     super.dispose();
   }
 
@@ -76,16 +74,15 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
   }
 
   void _openDetail(PhotoEntry entry) {
-    Navigator.of(context).pushNamed(
-      AppConstants.photoDetailRoute,
-      arguments: _store.getPhotoByKey(entry.dateKey) ?? entry,
-    );
+    Navigator.of(
+      context,
+    ).pushNamed(AppConstants.photoDetailRoute, arguments: entry);
   }
 
   void _openSwipeDays(PhotoEntry entry) {
     Navigator.of(
       context,
-    ).pushNamed(AppConstants.swipeDaysRoute, arguments: entry.dateKey);
+    ).pushNamed(AppConstants.swipeDaysRoute, arguments: entry);
   }
 
   Future<void> _promptPhotoCapture() async {
@@ -116,18 +113,21 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
       final newEntry = PhotoEntry(
         date: now,
         title: 'Daily Capture',
-        caption: 'Captured moment from today.',
         location: source == PhotoSource.camera
             ? 'Camera Capture'
             : 'Photo Library',
         timeFormatted: formattedTime,
         imagePath: capturedPath,
         icon: Icons.camera_alt_rounded,
-        gradientColors: const [AppColors.accent, AppColors.surfaceDark],
+        gradientColors: [AppColors.accent, AppColors.surfaceDark],
       );
 
       try {
-        await _store.savePhoto(entry: newEntry, sourceTempPath: capturedPath);
+        await _store.addPhotoToDay(
+          dateKey: DateKey.fromDateTime(now),
+          photo: newEntry,
+          sourceTempPath: capturedPath,
+        );
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -144,11 +144,12 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = AppColors.current.isDark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
         backgroundColor: AppColors.background,
@@ -181,7 +182,7 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_rounded,
               color: AppColors.textPrimary,
               size: 22.0,
@@ -190,13 +191,13 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
             onPressed: () => Navigator.maybePop(context),
           ),
           const SizedBox(width: AppSpacing.xs),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('Diary', style: AppTypography.appTitle),
-                SizedBox(height: 2.0),
+                const SizedBox(height: 2.0),
                 Text(
                   'CHRONOLOGICAL PHOTO JOURNAL',
                   style: AppTypography.appTagline,
@@ -226,7 +227,7 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
             ),
             const SizedBox(width: AppSpacing.xs),
             IconButton(
-              icon: const Icon(
+              icon: Icon(
                 Icons.history_rounded,
                 color: AppColors.accent,
                 size: 22.0,
@@ -237,7 +238,7 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
               },
             ),
             IconButton(
-              icon: const Icon(
+              icon: Icon(
                 Icons.view_carousel_rounded,
                 color: AppColors.textPrimary,
                 size: 22.0,
@@ -269,18 +270,18 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
             Container(
               width: 72.0,
               height: 72.0,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.accentLight,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.auto_stories_outlined,
                 size: 34.0,
                 color: AppColors.accent,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            const Text(
+            Text(
               'Your Photo Journal',
               style: AppTypography.sectionTitle,
               textAlign: TextAlign.center,
@@ -288,7 +289,7 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
             const SizedBox(height: AppSpacing.xs),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 300.0),
-              child: const Text(
+              child: Text(
                 'Every daily photo you capture will appear here in chronological order, telling the visual story of your life.',
                 style: AppTypography.body,
                 textAlign: TextAlign.center,
@@ -326,7 +327,9 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640.0),
+        constraints: const BoxConstraints(
+          maxWidth: AppBreakpoints.maxDiaryWidth,
+        ),
         child: ListView.builder(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
@@ -339,8 +342,9 @@ class _VisualDiaryScreenState extends State<VisualDiaryScreen> {
           itemBuilder: (context, index) {
             final entry = entries[index];
             return VisualDiaryEntryCard(
-              key: ValueKey('diary_entry_${entry.dateKey.format()}'),
+              key: ValueKey('diary_entry_${entry.effectiveId}'),
               entry: entry,
+              dayEntry: _store.getDay(entry.dateKey),
               onTap: _openDetail,
               onBrowseTap: _openSwipeDays,
             );

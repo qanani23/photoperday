@@ -28,7 +28,7 @@ class PhotoPlaceholder extends StatelessWidget {
             color: colorTint ?? AppColors.surfaceSubtle,
             gradient: colorTint != null
                 ? null
-                : const LinearGradient(
+                : LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [

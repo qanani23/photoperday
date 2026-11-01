@@ -89,67 +89,73 @@ void main() {
       expect(store.getPhoto(midnightQuery)?.title, 'Morning Light');
     });
 
-    // 5. Add second photo to same date → replaces first
-    test('5. Add second photo to same date -> replaces first', () {
-      final dateA = DateTime(2026, 9, 12, 8, 0);
-      final photoA = PhotoEntry(
-        date: dateA,
-        title: 'Photo A',
-        gradientColors: const [Colors.red, Colors.pink],
-        imagePath: '/tmp/photo_a.jpg',
-      );
-
-      store.setPhoto(photoA);
-      expect(store.totalPhotos, 1);
-      expect(store.getPhoto(dateA)?.title, 'Photo A');
-
-      // Second photo on same date at different hour
-      final dateB = DateTime(2026, 9, 12, 17, 30);
-      final photoB = PhotoEntry(
-        date: dateB,
-        title: 'Photo B (Replacement)',
-        gradientColors: const [Colors.green, Colors.teal],
-        imagePath: '/tmp/photo_b.jpg',
-      );
-
-      store.setPhoto(photoB);
-
-      // Exactly ONE photo must remain for this date
-      expect(store.totalPhotos, 1);
-      expect(store.getPhoto(dateA)?.title, 'Photo B (Replacement)');
-      expect(store.getPhoto(dateB)?.title, 'Photo B (Replacement)');
-      expect(store.getPhoto(dateB)?.imagePath, '/tmp/photo_b.jpg');
-      expect(store.allEntries.length, 1);
-    });
-
-    // 6. Replacing multiple times still leaves exactly one photo
-    test('6. Replacing multiple times still leaves exactly one photo', () {
-      final baseDate = DateTime(2026, 9, 12);
-
-      for (int i = 1; i <= 5; i++) {
-        final entry = PhotoEntry(
-          date: baseDate.add(Duration(hours: i * 3)),
-          title: 'Version $i',
-          gradientColors: const [Colors.cyan, Colors.blue],
-          imagePath: '/tmp/version_$i.jpg',
+    // 5. Add second photo to same date -> accumulates without replacing
+    test(
+      '5. Add second photo to same date -> accumulates without replacing',
+      () {
+        final dateA = DateTime(2026, 9, 12, 8, 0);
+        final photoA = PhotoEntry(
+          date: dateA,
+          title: 'Photo A',
+          gradientColors: const [Colors.red, Colors.pink],
+          imagePath: '/tmp/photo_a.jpg',
         );
-        store.setPhoto(entry);
-        expect(
-          store.totalPhotos,
-          1,
-          reason: 'Must remain exactly 1 photo after step $i',
+
+        store.setPhoto(photoA);
+        expect(store.totalPhotos, 1);
+        expect(store.totalDays, 1);
+        expect(store.getPhoto(dateA)?.title, 'Photo A');
+
+        // Second photo on same date at different hour
+        final dateB = DateTime(2026, 9, 12, 17, 30);
+        final photoB = PhotoEntry(
+          date: dateB,
+          title: 'Photo B (Additional)',
+          gradientColors: const [Colors.green, Colors.teal],
+          imagePath: '/tmp/photo_b.jpg',
         );
-      }
 
-      final current = store.getPhoto(baseDate);
-      expect(current, isNotNull);
-      expect(current!.title, 'Version 5');
-      expect(current.imagePath, '/tmp/version_5.jpg');
-      expect(store.allEntries.length, 1);
-    });
+        store.setPhoto(photoB);
 
-    // 7. Different dates can each have one photo
-    test('7. Different dates can each have one photo', () {
+        // Both photos are preserved for this calendar day
+        expect(store.totalPhotos, 2);
+        expect(store.totalDays, 1);
+        expect(store.getDay(const DateKey(2026, 9, 12))!.photoCount, 2);
+        expect(store.allEntries.length, 2);
+      },
+    );
+
+    // 6. Adding multiple photos accumulates in day entry without replacing
+    test(
+      '6. Adding multiple photos accumulates in day entry without replacing',
+      () {
+        final baseDate = DateTime(2026, 9, 12);
+
+        for (int i = 1; i <= 5; i++) {
+          final entry = PhotoEntry(
+            date: baseDate.add(Duration(hours: i * 3)),
+            title: 'Version $i',
+            gradientColors: const [Colors.cyan, Colors.blue],
+            imagePath: '/tmp/version_$i.jpg',
+          );
+          store.setPhoto(entry);
+          expect(
+            store.totalPhotos,
+            i,
+            reason: 'Accumulates to $i photos after step $i',
+          );
+        }
+
+        expect(store.totalDays, 1);
+        final day = store.getDay(const DateKey(2026, 9, 12));
+        expect(day, isNotNull);
+        expect(day!.photoCount, 5);
+        expect(store.allEntries.length, 5);
+      },
+    );
+
+    // 7. Different dates can each have multiple photos
+    test('7. Different dates can each have multiple photos', () {
       final date1 = DateTime(2026, 9, 12, 11, 0);
       final date2 = DateTime(2026, 9, 13, 14, 0);
       final date3 = DateTime(2026, 9, 14, 18, 0);
@@ -182,6 +188,7 @@ void main() {
       );
 
       expect(store.totalPhotos, 3);
+      expect(store.totalDays, 3);
       expect(store.hasPhoto(date1), isTrue);
       expect(store.hasPhoto(date2), isTrue);
       expect(store.hasPhoto(date3), isTrue);
@@ -189,20 +196,19 @@ void main() {
       expect(store.getPhoto(date2)?.title, 'Day 13 Photo');
       expect(store.getPhoto(date3)?.title, 'Day 14 Photo');
 
-      // Replacing day 13 should not affect day 12 or day 14
+      // Adding to day 13 accumulates on day 13 without replacing
       store.setPhoto(
         PhotoEntry(
           date: DateTime(2026, 9, 13, 20, 0),
-          title: 'Day 13 Updated',
+          title: 'Day 13 Additional',
           gradientColors: const [Colors.teal, Colors.tealAccent],
           imagePath: '/tmp/d13_v2.jpg',
         ),
       );
 
-      expect(store.totalPhotos, 3);
-      expect(store.getPhoto(date1)?.title, 'Day 12 Photo');
-      expect(store.getPhoto(date2)?.title, 'Day 13 Updated');
-      expect(store.getPhoto(date3)?.title, 'Day 14 Photo');
+      expect(store.totalPhotos, 4);
+      expect(store.totalDays, 3);
+      expect(store.getDay(const DateKey(2026, 9, 13))!.photoCount, 2);
     });
 
     // 8. Removing a photo leaves the date empty
@@ -313,7 +319,7 @@ void main() {
     );
 
     // Extra: replacePhoto convenience method
-    test('replacePhoto explicitly updates entry for specified date', () {
+    test('replacePhoto convenience method adds photo for specified date', () {
       final date = DateTime(2026, 9, 15);
       final initial = PhotoEntry(
         date: date,
@@ -322,18 +328,18 @@ void main() {
       );
       store.setPhoto(initial);
 
-      final replacement = PhotoEntry(
+      final secondEntry = PhotoEntry(
         date: date,
-        title: 'Replaced Via Method',
+        title: 'Added Via Method',
         gradientColors: const [Colors.blue, Colors.cyan],
-        imagePath: '/tmp/replacement.jpg',
+        imagePath: '/tmp/added.jpg',
       );
-      store.replacePhoto(date, replacement);
+      store.replacePhoto(date, secondEntry);
 
-      expect(store.totalPhotos, 1);
-      final result = store.getPhoto(date);
-      expect(result?.title, 'Replaced Via Method');
-      expect(result?.imagePath, '/tmp/replacement.jpg');
+      expect(store.totalPhotos, 2);
+      expect(store.totalDays, 1);
+      final day = store.getDay(const DateKey(2026, 9, 15));
+      expect(day!.photoCount, 2);
     });
   });
 }

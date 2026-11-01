@@ -8,6 +8,7 @@ class CalendarGrid extends StatelessWidget {
     required this.children,
     this.crossAxisCount = 7,
     this.spacing = AppSpacing.gridGap,
+    this.childAspectRatio = 1.0,
     this.padding = const EdgeInsets.symmetric(
       horizontal: AppSpacing.pageHorizontal,
     ),
@@ -16,6 +17,7 @@ class CalendarGrid extends StatelessWidget {
   final List<Widget> children;
   final int crossAxisCount;
   final double spacing;
+  final double childAspectRatio;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -28,6 +30,7 @@ class CalendarGrid extends StatelessWidget {
         crossAxisCount: crossAxisCount,
         mainAxisSpacing: spacing,
         crossAxisSpacing: spacing,
+        childAspectRatio: childAspectRatio,
         children: children,
       ),
     );

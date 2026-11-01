@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
+import 'package:photo_per_day/data/models/day_entry.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
@@ -30,7 +31,6 @@ void main() {
     PhotoEntry createTestEntry({
       required DateTime date,
       required String title,
-      String? caption,
       String? location,
       String? imagePath,
       String timeFormatted = '2:45 PM',
@@ -38,7 +38,6 @@ void main() {
       return PhotoEntry(
         date: date,
         title: title,
-        caption: caption,
         location: location,
         imagePath: imagePath,
         timeFormatted: timeFormatted,
@@ -138,7 +137,6 @@ void main() {
           final entry = createTestEntry(
             date: date,
             title: 'Preserved After Restart',
-            caption: 'Local diary record',
             location: 'Home Studio',
           );
 
@@ -174,7 +172,6 @@ void main() {
           final entry = createTestEntry(
             date: date,
             title: 'Sunset at Beach',
-            caption: 'Captured offline via camera',
             location: 'Pacific Beach',
             timeFormatted: '7:42 PM',
           );
@@ -209,11 +206,7 @@ void main() {
             'gallery_pick_external.jpg',
           );
 
-          final entry = createTestEntry(
-            date: date,
-            title: 'Gallery Import',
-            caption: 'Selected from photo library',
-          );
+          final entry = createTestEntry(date: date, title: 'Gallery Import');
 
           final saved = await store.savePhoto(
             entry: entry,
@@ -232,14 +225,13 @@ void main() {
       );
 
       test(
-        'Editing title, caption, location offline persists and survives restart',
+        'Editing title, location offline persists and survives restart',
         () async {
           final date = DateTime(2026, 6, 3);
           final dummy = createDummySourcePhoto('edit_test.jpg');
           final initial = createTestEntry(
             date: date,
             title: 'Initial Title',
-            caption: 'Initial Caption',
             location: 'Initial Location',
           );
 
@@ -252,7 +244,6 @@ void main() {
           final updated = await store.updatePhotoMetadata(
             dateKey: saved.dateKey,
             title: 'Updated Offline Title',
-            caption: 'Updated Offline Caption',
             location: 'Updated Offline Location',
           );
 
@@ -271,13 +262,12 @@ void main() {
 
           final restored = restartedStore.getPhoto(date);
           expect(restored!.title, 'Updated Offline Title');
-          expect(restored.caption, 'Updated Offline Caption');
           expect(restored.location, 'Updated Offline Location');
         },
       );
 
       test(
-        'Replacing photo offline preserves single-photo-per-day DateKey enforcement',
+        'Adding second photo offline accumulates in DayEntry and preserves both files',
         () async {
           final date = DateTime(2026, 6, 4);
           final dummy1 = createDummySourcePhoto('first_shot.jpg');
@@ -290,24 +280,19 @@ void main() {
           );
           final firstDiskPath = firstSaved.imagePath!;
 
-          // Replace on same date
-          final secondEntry = createTestEntry(
-            date: date,
-            title: 'Replacement Shot',
-          );
+          // Add second photo on same date
+          final secondEntry = createTestEntry(date: date, title: 'Second Shot');
           final secondSaved = await store.savePhoto(
             entry: secondEntry,
             sourceTempPath: dummy2.path,
           );
           final secondDiskPath = secondSaved.imagePath!;
 
-          expect(store.totalPhotos, 1);
-          expect(store.getPhoto(date)!.title, 'Replacement Shot');
+          expect(store.totalPhotos, 2);
+          expect(store.totalDays, 1);
+          expect(File(firstDiskPath).existsSync(), isTrue);
           expect(File(secondDiskPath).existsSync(), isTrue);
-          expect(
-            File(firstDiskPath).existsSync(),
-            isFalse,
-          ); // Old file cleaned up
+          expect(store.getDayByDate(date)!.photos.length, 2);
         },
       );
 
@@ -455,7 +440,7 @@ void main() {
       );
 
       test(
-        'Double replacement on same DateKey retains only the final photo',
+        'Multiple rapid additions on same DateKey preserves all photos',
         () async {
           final date = DateTime(2026, 7, 3);
           final d1 = createDummySourcePhoto('double1.jpg');
@@ -467,27 +452,29 @@ void main() {
             sourceTempPath: d1.path,
           );
 
-          // Fire two rapid replacements concurrently
+          // Fire two rapid additions concurrently
           final r2 = store.savePhoto(
             entry: createTestEntry(date: date, title: 'V2'),
             sourceTempPath: d2.path,
           );
           final r3 = store.savePhoto(
-            entry: createTestEntry(date: date, title: 'V3 (Final)'),
+            entry: createTestEntry(date: date, title: 'V3 (Third)'),
             sourceTempPath: d3.path,
           );
 
           await Future.wait([r2, r3]);
 
-          expect(store.totalPhotos, 1);
-          expect(store.getPhoto(date)!.title, 'V3 (Final)');
+          expect(store.totalPhotos, 3);
+          expect(store.totalDays, 1);
+          final day = store.getDayByDate(date);
+          expect(day!.photos.length, 3);
 
-          // Only one managed photo file remains in photos directory
+          // All three managed photo files exist in photos directory
           final managedFiles = fileManager.photosDir
               .listSync()
               .whereType<File>()
               .toList();
-          expect(managedFiles.length, 1);
+          expect(managedFiles.length, 3);
         },
       );
 
@@ -647,22 +634,25 @@ void main() {
       );
 
       test(
-        'Orphaned files from interrupted writes are swept cleanly on restart',
+        'Orphaned files are not automatically pruned on startup to protect user data',
         () async {
-          // Manually drop an orphaned file into the managed photos directory
+          // Manually drop an unreferenced file into the managed photos directory
           final orphanPath =
               '${fileManager.photosDir.path}/2026-09-05_111111111111.jpg';
           File(orphanPath).writeAsStringSync('abandoned-temp-bytes');
           expect(File(orphanPath).existsSync(), isTrue);
 
-          // Restarting the store runs reconcileOrphanFiles() automatically
+          // Restarting the store preserves files to protect existing user photos
           final restartedStore = PersistentDailyPhotoStore(
             fileManager: fileManager,
             metadataStorage: metadataStorage,
           );
           await restartedStore.init(customBaseDir: tempDir);
 
-          // Orphaned file must have been cleanly pruned
+          expect(File(orphanPath).existsSync(), isTrue);
+
+          // Explicit reconciliation cleans unreferenced files
+          await restartedStore.reconcileOrphanFiles();
           expect(File(orphanPath).existsSync(), isFalse);
         },
       );
@@ -687,6 +677,14 @@ class _FailingPhotoMetadataStorage extends PhotoMetadataStorage {
   _FailingPhotoMetadataStorage({super.customBaseDir});
 
   bool shouldFail = false;
+
+  @override
+  Future<void> saveDays(Map<DateKey, DayEntry> entries) async {
+    if (shouldFail) {
+      throw const FileSystemException('Simulated disk full error');
+    }
+    return super.saveDays(entries);
+  }
 
   @override
   Future<void> saveAll(Map<DateKey, PhotoEntry> entries) async {

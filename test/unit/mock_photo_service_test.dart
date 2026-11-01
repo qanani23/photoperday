@@ -14,7 +14,6 @@ void main() {
 
       expect(entry.date, DateTime(2026, 3, 15));
       expect(entry.title, 'Golden Sunset');
-      expect(entry.caption, isNull);
       expect(entry.location, isNull);
       expect(entry.timeFormatted, '2:45 PM');
       expect(entry.category, 'Daily Life');
@@ -28,7 +27,6 @@ void main() {
         final original = PhotoEntry(
           date: DateTime(2026, 3, 15),
           title: 'Original Title',
-          caption: 'Original Caption',
           location: 'Original Location',
           timeFormatted: '1:00 PM',
           category: 'Original Category',
@@ -38,12 +36,10 @@ void main() {
 
         final updated = original.copyWith(
           title: 'Updated Title',
-          caption: 'Updated Caption',
           location: 'New City',
         );
 
         expect(updated.title, 'Updated Title');
-        expect(updated.caption, 'Updated Caption');
         expect(updated.location, 'New City');
         // Preserved fields
         expect(updated.date, original.date);

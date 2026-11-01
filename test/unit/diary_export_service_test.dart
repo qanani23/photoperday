@@ -3,124 +3,15 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:photo_per_day/data/models/auth_user.dart';
-import 'package:photo_per_day/data/models/date_key.dart';
-import 'package:photo_per_day/data/models/drive_auth_state.dart';
-import 'package:photo_per_day/data/models/drive_folder_reference.dart';
-import 'package:photo_per_day/data/models/drive_folder_result.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_operation_type.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
 import 'package:photo_per_day/data/services/daily_reminder_service.dart';
 import 'package:photo_per_day/data/services/daily_reminder_storage.dart';
 import 'package:photo_per_day/data/services/diary_export_service.dart';
-import 'package:photo_per_day/data/services/drive_api_adapter.dart';
-import 'package:photo_per_day/data/services/drive_auth_storage.dart';
-import 'package:photo_per_day/data/services/drive_folder_storage.dart';
-import 'package:photo_per_day/data/services/google_auth_service.dart';
-import 'package:photo_per_day/data/services/google_drive_auth_service.dart';
-import 'package:photo_per_day/data/services/google_drive_service.dart';
 import 'package:photo_per_day/data/services/notification_client.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-
-class _FakeExportDriveAdapter implements DriveApiAdapter {
-  final List<String> trashedFileIds = [];
-  bool shouldFailTrash = false;
-
-  @override
-  Future<DriveFolderReference?> findFolder({
-    required String folderName,
-    required Map<String, String> authHeaders,
-    String? accountEmail,
-  }) async {
-    return DriveFolderReference(
-      folderId: 'folder_app_123',
-      folderName: folderName,
-      authorizedEmail: accountEmail ?? 'user@gmail.com',
-      resolvedAt: DateTime.now().toUtc(),
-    );
-  }
-
-  @override
-  Future<DriveFolderReference> createFolder({
-    required String folderName,
-    required Map<String, String> authHeaders,
-    String? accountEmail,
-  }) async {
-    return DriveFolderReference(
-      folderId: 'folder_app_123',
-      folderName: folderName,
-      authorizedEmail: accountEmail ?? 'user@gmail.com',
-      resolvedAt: DateTime.now().toUtc(),
-    );
-  }
-
-  @override
-  Future<void> trashPhotoFile({
-    required String fileId,
-    required Map<String, String> authHeaders,
-  }) async {
-    if (shouldFailTrash) {
-      throw const DriveApiException(
-        'Simulated Drive network failure during trash operation',
-        errorType: DriveFolderErrorType.apiError,
-      );
-    }
-    trashedFileIds.add(fileId);
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _TestFakeGoogleSignInDelegate implements GoogleSignInDelegate {
-  AuthUser? mockUser;
-  bool shouldThrowOnSignIn = false;
-
-  @override
-  Future<AuthUser?> signInSilently() async => mockUser;
-
-  @override
-  Future<AuthUser?> signIn() async => mockUser;
-
-  @override
-  Future<void> signOut() async {
-    mockUser = null;
-  }
-
-  @override
-  Future<void> disconnect() async {
-    mockUser = null;
-  }
-
-  @override
-  Future<bool> canAccessDriveScope() async => true;
-
-  @override
-  Future<bool> requestDriveScope() async => true;
-
-  @override
-  Future<Map<String, String>> getAuthHeaders() async => {
-    'Authorization': 'Bearer test_token',
-  };
-}
-
-class _TestFakeDriveAuthDelegate implements GoogleDriveAuthDelegate {
-  bool driveScopeGranted = true;
-
-  @override
-  Future<bool> canAccessDriveScope() async => true;
-
-  @override
-  Future<bool> requestDriveScope() async => driveScopeGranted;
-
-  @override
-  Future<Map<String, String>> getAuthHeaders() async => {
-    'Authorization': 'Bearer test_token',
-  };
-}
 
 class _TestFakeNotificationClient implements NotificationClient {
   bool permissionGranted = true;
@@ -174,11 +65,6 @@ void main() {
   late PersistentDailyPhotoStore store;
   late DiaryExportService exportService;
   late Directory exportDir;
-  late _TestFakeGoogleSignInDelegate authDelegate;
-  late _TestFakeDriveAuthDelegate driveAuthDelegate;
-  late DriveAuthStorage driveAuthStorage;
-  late GoogleAuthService authService;
-  late GoogleDriveAuthService driveAuthService;
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('m35_export_test_');
@@ -194,22 +80,11 @@ void main() {
     await store.init();
 
     exportService = DiaryExportService(store: store);
-
-    authDelegate = _TestFakeGoogleSignInDelegate();
-    driveAuthDelegate = _TestFakeDriveAuthDelegate();
-    driveAuthStorage = DriveAuthStorage(customBaseDir: tempDir.path);
-    authService = GoogleAuthService(delegate: authDelegate);
-    driveAuthService = GoogleDriveAuthService(
-      delegate: driveAuthDelegate,
-      authService: authService,
-      storage: driveAuthStorage,
-    );
   });
 
   tearDown(() async {
     PersistentDailyPhotoStore.resetTestInstance();
     DiaryExportService.resetTestInstance();
-    GoogleDriveService.resetInstance();
     DailyReminderService.resetTestInstance();
     try {
       if (await tempDir.exists()) {
@@ -254,7 +129,6 @@ void main() {
         entry: PhotoEntry(
           date: DateTime(2026, 3, 28, 14, 30),
           title: 'Spring Day',
-          caption: 'Sunny morning stroll',
           location: 'City Park',
           category: 'Nature',
           gradientColors: const [],
@@ -352,7 +226,6 @@ void main() {
         entry: PhotoEntry(
           date: DateTime.utc(2026, 4, 15, 10, 15),
           title: 'Coffee Break',
-          caption: 'Great espresso at the corner cafe',
           location: 'Little Italy',
           category: 'Food & Drink',
           timeFormatted: '10:15 AM',
@@ -374,7 +247,7 @@ void main() {
               as Map<String, dynamic>;
 
       expect(manifest['exportVersion'], 1);
-      expect(manifest['appName'], 'Photo a Day');
+      expect(manifest['appName'], 'Daria');
       expect(manifest['totalPhotos'], 1);
       expect(manifest['exportedAt'], isNotNull);
 
@@ -382,7 +255,7 @@ void main() {
       expect(photo['date'], '2026-04-15');
       expect(photo['filename'], 'photos/2026-04-15.jpg');
       expect(photo['title'], 'Coffee Break');
-      expect(photo['caption'], 'Great espresso at the corner cafe');
+      expect(photo.containsKey('caption'), isFalse);
       expect(photo['location'], 'Little Italy');
       expect(photo['category'], 'Food & Drink');
       expect(photo['timeFormatted'], '10:15 AM');
@@ -427,7 +300,6 @@ void main() {
         entry: PhotoEntry(
           date: DateTime(2026, 2, 14),
           title: 'Private Sync Test',
-          caption: 'Testing token safety',
           gradientColors: const [],
           imagePath: photoPath,
           syncStatus: SyncStatus.synced,
@@ -622,7 +494,6 @@ void main() {
           entry: PhotoEntry(
             date: DateTime(2026, 9, 1),
             title: 'Offline Day',
-            caption: 'Completely disconnected',
             gradientColors: const [],
             imagePath: photo,
             syncStatus: SyncStatus.localOnly,
@@ -678,392 +549,7 @@ void main() {
     );
 
     test(
-      '12. Local deletion preserves Google Drive backup folder state',
-      () async {
-        final fakeAdapter = _FakeExportDriveAdapter();
-        final folderStorage = DriveFolderStorage(customBaseDir: tempDir.path);
-        final driveService = GoogleDriveService(
-          adapter: fakeAdapter,
-          storage: folderStorage,
-          authService: authService,
-          driveAuthService: driveAuthService,
-        );
-
-        // Seed a ready Drive folder
-        await folderStorage.saveFolderReference(
-          DriveFolderReference(
-            folderId: 'folder_keep_123',
-            folderName: 'Photo a Day',
-            authorizedEmail: 'user@gmail.com',
-            resolvedAt: DateTime.now().toUtc(),
-          ),
-        );
-        authDelegate.mockUser = const AuthUser(
-          id: '1',
-          email: 'user@gmail.com',
-          displayName: 'User',
-        );
-        await driveAuthStorage.saveState(
-          DriveAuthState(
-            hasAuthorizedDrive: true,
-            authorizedEmail: 'user@gmail.com',
-            lastAuthorizedAt: DateTime.now().toUtc(),
-          ),
-        );
-        await authService.init();
-        await driveAuthService.init();
-        await driveService.init();
-        expect(driveService.currentFolder?.folderId, 'folder_keep_123');
-
-        // Add a synced photo
-        final p1 = await createDummyPhotoFile('synced.jpg');
-        await store.savePhoto(
-          entry: PhotoEntry(
-            date: DateTime(2026, 3, 1),
-            title: 'Synced Day',
-            gradientColors: const [],
-            imagePath: p1,
-            syncStatus: SyncStatus.synced,
-            driveFileId: 'remote_file_abc',
-          ),
-        );
-
-        // Delete local diary
-        await store.deleteLocalDiary();
-
-        // Verify local photos are gone
-        expect(store.totalPhotos, 0);
-
-        // Verify Google Drive backup state is completely preserved
-        expect(driveService.currentFolder?.folderId, 'folder_keep_123');
-        expect(fakeAdapter.trashedFileIds, isEmpty); // NO drive trash calls
-      },
-    );
-
-    test(
-      '13. Local deletion does not enqueue an unintended remote delete',
-      () async {
-        final p1 = await createDummyPhotoFile('no_remote_delete.jpg');
-        await store.savePhoto(
-          entry: PhotoEntry(
-            date: DateTime(2026, 3, 1),
-            title: 'Day with Drive ID',
-            gradientColors: const [],
-            imagePath: p1,
-            syncStatus: SyncStatus.synced,
-            driveFileId: 'remote_xyz_999',
-          ),
-        );
-
-        await store.deleteLocalDiary();
-
-        // Verify no delete operation was added to the sync queue
-        expect(store.syncQueue.operations, isEmpty);
-        // Verify no pending tombstones were recorded
-        expect(store.pendingDeletions, isEmpty);
-      },
-    );
-
-    test('14. Cloud deletion requires proper Google authorization', () async {
-      final fakeAdapter = _FakeExportDriveAdapter();
-      final driveService = GoogleDriveService(
-        adapter: fakeAdapter,
-        authService: authService,
-        driveAuthService: driveAuthService,
-      );
-
-      // User not signed in
-      final result = await driveService.deleteDriveBackup(photoStore: store);
-      expect(result, isA<DriveDeleteFailure>());
-      final failure = result as DriveDeleteFailure;
-      expect(failure.message, contains('Sign in with your Google account'));
-    });
-
-    test(
-      '15. Cloud deletion only operates on app folder and preserves local photos',
-      () async {
-        final fakeAdapter = _FakeExportDriveAdapter();
-        final folderStorage = DriveFolderStorage(customBaseDir: tempDir.path);
-        authDelegate.mockUser = const AuthUser(
-          id: '1',
-          email: 'test@example.com',
-          displayName: 'Test User',
-        );
-        await driveAuthStorage.saveState(
-          DriveAuthState(
-            hasAuthorizedDrive: true,
-            authorizedEmail: 'test@example.com',
-            lastAuthorizedAt: DateTime.now().toUtc(),
-          ),
-        );
-        await authService.init();
-        await driveAuthService.init();
-
-        final driveService = GoogleDriveService(
-          adapter: fakeAdapter,
-          storage: folderStorage,
-          authService: authService,
-          driveAuthService: driveAuthService,
-        );
-        await driveService.init();
-
-        final p1 = await createDummyPhotoFile('local_kept.jpg');
-        await store.savePhoto(
-          entry: PhotoEntry(
-            date: DateTime(2026, 3, 15),
-            title: 'Keep Me Local',
-            gradientColors: const [],
-            imagePath: p1,
-            syncStatus: SyncStatus.synced,
-            driveFileId: 'drive_photo_1',
-            authorizedEmail: 'test@example.com',
-          ),
-        );
-
-        final result = await driveService.deleteDriveBackup(photoStore: store);
-        expect(result, isA<DriveDeleteSuccess>());
-
-        // Verifies only the app folder was targeted
-        expect(fakeAdapter.trashedFileIds, contains('folder_app_123'));
-        expect(fakeAdapter.trashedFileIds.length, 1);
-
-        // Verifies local photos remain completely on disk
-        expect(store.totalPhotos, 1);
-        final localEntry = store.getPhotoByKey(const DateKey(2026, 3, 15));
-        expect(localEntry, isNotNull);
-        expect(localEntry!.syncStatus, SyncStatus.localOnly);
-        expect(localEntry.driveFileId, isNull);
-        expect(File(p1).existsSync(), isTrue);
-      },
-    );
-
-    test(
-      '16. Cloud deletion failure is reported accurately without corrupting state',
-      () async {
-        final fakeAdapter = _FakeExportDriveAdapter()..shouldFailTrash = true;
-        authDelegate.mockUser = const AuthUser(
-          id: '1',
-          email: 'test@example.com',
-          displayName: 'Test User',
-        );
-        await driveAuthStorage.saveState(
-          DriveAuthState(
-            hasAuthorizedDrive: true,
-            authorizedEmail: 'test@example.com',
-            lastAuthorizedAt: DateTime.now().toUtc(),
-          ),
-        );
-        await authService.init();
-        await driveAuthService.init();
-
-        final driveService = GoogleDriveService(
-          adapter: fakeAdapter,
-          authService: authService,
-          driveAuthService: driveAuthService,
-        );
-        await driveService.init();
-
-        final p1 = await createDummyPhotoFile('keep_state.jpg');
-        await store.savePhoto(
-          entry: PhotoEntry(
-            date: DateTime(2026, 3, 15),
-            title: 'Keep State',
-            gradientColors: const [],
-            imagePath: p1,
-            syncStatus: SyncStatus.synced,
-            driveFileId: 'drive_photo_99',
-            authorizedEmail: 'test@example.com',
-          ),
-        );
-
-        final result = await driveService.deleteDriveBackup(photoStore: store);
-        expect(result, isA<DriveDeleteFailure>());
-        final failure = result as DriveDeleteFailure;
-        expect(failure.message, contains('Simulated Drive network failure'));
-
-        // Photo sync state must NOT be reset if cloud deletion failed
-        final entry = store.getPhotoByKey(const DateKey(2026, 3, 15));
-        expect(entry!.syncStatus, SyncStatus.synced);
-        expect(entry.driveFileId, 'drive_photo_99');
-      },
-    );
-
-    test(
-      '17. Pending upload cannot resurrect a locally deleted photo',
-      () async {
-        final p1 = await createDummyPhotoFile('pending_up.jpg');
-        await store.savePhoto(
-          entry: PhotoEntry(
-            date: DateTime(2026, 4, 1),
-            title: 'Pending Upload',
-            gradientColors: const [],
-            imagePath: p1,
-            syncStatus: SyncStatus.pending,
-          ),
-        );
-        expect(
-          store.syncQueue.operations.any(
-            (o) => o.type == SyncOperationType.upload,
-          ),
-          isTrue,
-        );
-
-        await store.deleteLocalDiary();
-
-        // SyncQueue must be cleared of the pending upload
-        expect(store.syncQueue.operations, isEmpty);
-        expect(store.totalPhotos, 0);
-      },
-    );
-
-    test('18. Pending update cannot resurrect a deleted local photo', () async {
-      final p1 = await createDummyPhotoFile('pending_upd.jpg');
-      await store.savePhoto(
-        entry: PhotoEntry(
-          date: DateTime(2026, 4, 2),
-          title: 'Initial',
-          gradientColors: const [],
-          imagePath: p1,
-          syncStatus: SyncStatus.synced,
-          driveFileId: 'remote_file_upd',
-        ),
-      );
-
-      // Update metadata to make it pending update
-      await store.updatePhotoMetadata(
-        dateKey: const DateKey(2026, 4, 2),
-        title: 'New Title',
-      );
-      expect(
-        store.syncQueue.operations.any(
-          (o) => o.type == SyncOperationType.update,
-        ),
-        isTrue,
-      );
-
-      await store.deleteLocalDiary();
-
-      expect(store.syncQueue.operations, isEmpty);
-      expect(store.totalPhotos, 0);
-    });
-
-    test(
-      '19. Account switching remains isolated during cloud deletion',
-      () async {
-        final fakeAdapter = _FakeExportDriveAdapter();
-        final folderStorage = DriveFolderStorage(customBaseDir: tempDir.path);
-        await folderStorage.saveFolderReference(
-          DriveFolderReference(
-            folderId: 'folder_user_a',
-            folderName: 'Photo a Day',
-            authorizedEmail: 'usera@gmail.com',
-            resolvedAt: DateTime.now().toUtc(),
-          ),
-        );
-
-        authDelegate.mockUser = const AuthUser(
-          id: '2',
-          email: 'userb@gmail.com',
-          displayName: 'User B',
-        );
-        await driveAuthStorage.saveState(
-          DriveAuthState(
-            hasAuthorizedDrive: true,
-            authorizedEmail: 'userb@gmail.com',
-            lastAuthorizedAt: DateTime.now().toUtc(),
-          ),
-        );
-        await authService.init();
-        await driveAuthService.init();
-
-        final driveService = GoogleDriveService(
-          adapter: fakeAdapter,
-          storage: folderStorage,
-          authService: authService,
-          driveAuthService: driveAuthService,
-        );
-        await driveService.init();
-
-        // Current active user is user B, but folder reference belonged to user A.
-        // Account isolation ensures folder_user_a is not touched!
-        await driveService.deleteDriveBackup(photoStore: store);
-        expect(fakeAdapter.trashedFileIds.contains('folder_user_a'), isFalse);
-      },
-    );
-
-    test(
-      '20. Combined deletion deletes both Google Drive backup and local diary data',
-      () async {
-        final fakeAdapter = _FakeExportDriveAdapter();
-        final folderStorage = DriveFolderStorage(customBaseDir: tempDir.path);
-        await folderStorage.saveFolderReference(
-          DriveFolderReference(
-            folderId: 'folder_combined_app',
-            folderName: 'Photo a Day',
-            authorizedEmail: 'user@gmail.com',
-            resolvedAt: DateTime.now().toUtc(),
-          ),
-        );
-
-        authDelegate.mockUser = const AuthUser(
-          id: '1',
-          email: 'user@gmail.com',
-          displayName: 'User',
-        );
-        await driveAuthStorage.saveState(
-          DriveAuthState(
-            hasAuthorizedDrive: true,
-            authorizedEmail: 'user@gmail.com',
-            lastAuthorizedAt: DateTime.now().toUtc(),
-          ),
-        );
-        await authService.init();
-        await driveAuthService.init();
-
-        final driveService = GoogleDriveService(
-          adapter: fakeAdapter,
-          storage: folderStorage,
-          authService: authService,
-          driveAuthService: driveAuthService,
-        );
-        await driveService.init();
-
-        final p1 = await createDummyPhotoFile('combined_target.jpg');
-        final saved = await store.savePhoto(
-          entry: PhotoEntry(
-            date: DateTime(2026, 3, 20),
-            title: 'Combined Target',
-            gradientColors: const [],
-            imagePath: p1,
-            syncStatus: SyncStatus.synced,
-            driveFileId: 'drive_combined_xyz',
-            authorizedEmail: 'user@gmail.com',
-          ),
-        );
-        expect(store.totalPhotos, 1);
-        final managedFile = File(saved.imagePath!);
-        expect(managedFile.existsSync(), isTrue);
-
-        // Execute combined deletion sequence (Drive backup first, then local diary)
-        final driveResult = await driveService.deleteDriveBackup(
-          photoStore: store,
-        );
-        expect(driveResult, isA<DriveDeleteSuccess>());
-        expect(fakeAdapter.trashedFileIds, contains('folder_combined_app'));
-
-        await store.deleteLocalDiary();
-
-        // Verify local store, sync queue, and tombstones are completely empty
-        expect(store.totalPhotos, 0);
-        expect(store.syncQueue.operations, isEmpty);
-        expect(store.pendingDeletions, isEmpty);
-        expect(managedFile.existsSync(), isFalse);
-        expect(store.fileManager.photosDir.listSync(), isEmpty);
-      },
-    );
-
-    test(
-      '21. Reminder and preferences remain intact after diary photo deletion',
+      '12. Reminder and preferences remain intact after diary photo deletion',
       () async {
         // Seed reminder setting with isolated storage
         final reminderStorage = DailyReminderStorage(

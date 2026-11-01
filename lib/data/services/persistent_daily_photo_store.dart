@@ -2,45 +2,38 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
+import 'package:photo_per_day/data/models/day_entry.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_operation.dart';
-import 'package:photo_per_day/data/models/sync_operation_type.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
-import 'package:photo_per_day/data/models/sync_tombstone.dart';
 import 'package:photo_per_day/data/services/daily_photo_rule.dart';
 import 'package:photo_per_day/data/services/local_storage_calculator.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-import 'package:photo_per_day/data/services/sync_queue.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
 
-/// Production implementation of [DailyPhotoStore] delivering persistent local storage,
-/// sync-state lifecycle management, and durable local outbox synchronization queueing.
+/// Production implementation of [DailyPhotoStore] delivering persistent local storage
+/// for a 100% offline, local-only personal photo diary.
 ///
-/// Features:
+/// Features (Milestone 58):
+/// - Day-level storage model ([DayEntry]) supporting multiple photos per local calendar day.
+/// - One editable daily reflection note per calendar day.
 /// - In-memory synchronous cache for instantaneous UI queries.
-/// - Two-layer storage: app-controlled photo files directory + atomic JSON metadata registry.
-/// - Single-photo-per-day enforcement with safe replacement (copy new -> write metadata -> delete old).
+/// - Two-layer storage: app-controlled photo files directory + atomic JSON metadata registry (Schema 2).
+/// - Non-destructive multi-photo additions (same-day capture never replaces existing photos).
+/// - Stable photo identification, independent file references, and reordering.
+/// - Safe deletion of individual photos (pruning day if last photo) or caller-confirmed day deletion.
 /// - Graceful handling of missing files, database corruptions, and cold app restarts.
 /// - Serialized async queueing preventing race conditions across concurrent operations.
-/// - Synchronization metadata tracking (localOnly, pending, synced, failed) without network coupling.
-/// - Pending deletion tombstones and durable local outbox queue for future Google Drive sync.
+/// - Completely offline: zero cloud network dependencies, sign-ins, or remote services.
 class PersistentDailyPhotoStore extends ChangeNotifier
     implements DailyPhotoStore {
   PersistentDailyPhotoStore({
     PhotoFileManager? fileManager,
     PhotoMetadataStorage? metadataStorage,
-    SyncQueue? syncQueue,
   }) : _fileManager = fileManager ?? PhotoFileManager(),
        _metadataStorage = metadataStorage ?? PhotoMetadataStorage(),
-       _syncQueue =
-           syncQueue ??
-           SyncQueue(
-             storage: SyncQueueStorage(
-               customBaseDir:
-                   fileManager?.customBaseDir ?? metadataStorage?.customBaseDir,
-             ),
-           );
+       _hasCustomDependencies = fileManager != null || metadataStorage != null;
+
+  final bool _hasCustomDependencies;
 
   static PersistentDailyPhotoStore? _testInstance;
 
@@ -63,13 +56,9 @@ class PersistentDailyPhotoStore extends ChangeNotifier
 
   PhotoFileManager _fileManager;
   PhotoMetadataStorage _metadataStorage;
-  SyncQueue _syncQueue;
 
-  /// In-memory cache of daily photo entries keyed by normalized DateKey.
-  final Map<DateKey, PhotoEntry> _entries = {};
-
-  /// In-memory cache of pending remote cloud deletions (tombstones).
-  final List<SyncTombstone> _pendingDeletions = [];
+  /// In-memory cache of day entries keyed by normalized DateKey.
+  final Map<DateKey, DayEntry> _dayEntries = {};
 
   bool _isInitialized = false;
   Future<void>? _activeOp;
@@ -84,7 +73,9 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   List<DateKey>? _cachedRecordedDates;
   List<PhotoEntry>? _cachedChronologicalEntries;
   List<PhotoEntry>? _cachedChronologicalAscendingEntries;
-  Set<DateKey>? _cachedPendingDeletionKeys;
+  List<DayEntry>? _cachedAllDayEntries;
+  List<DayEntry>? _cachedChronologicalDayEntries;
+  List<DayEntry>? _cachedChronologicalAscendingDayEntries;
 
   void _invalidateCaches() {
     _version++;
@@ -92,7 +83,9 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     _cachedRecordedDates = null;
     _cachedChronologicalEntries = null;
     _cachedChronologicalAscendingEntries = null;
-    _cachedPendingDeletionKeys = null;
+    _cachedAllDayEntries = null;
+    _cachedChronologicalDayEntries = null;
+    _cachedChronologicalAscendingDayEntries = null;
   }
 
   /// Whether the store has completed loading its persisted records from disk.
@@ -101,27 +94,16 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   /// The underlying [PhotoFileManager] used by this store.
   PhotoFileManager get fileManager => _fileManager;
 
-  /// The durable synchronization outbox used by this store.
-  SyncQueue get syncQueue => _syncQueue;
-
-  /// Unmodifiable view of all pending cloud deletion tombstones.
-  List<SyncTombstone> get pendingDeletions =>
-      List.unmodifiable(_pendingDeletions);
-
-  /// Checks if there is a pending cloud deletion tombstone for [dateKey].
-  bool hasPendingDeletion(DateKey dateKey) {
-    _cachedPendingDeletionKeys ??= _pendingDeletions
-        .map((t) => t.dateKey)
-        .toSet();
-    return _cachedPendingDeletionKeys!.contains(dateKey);
-  }
+  /// The underlying [PhotoMetadataStorage] used by this store.
+  PhotoMetadataStorage get metadataStorage => _metadataStorage;
 
   /// Lightweight sequential FIFO executor ensuring that persistent mutations
   /// never race against each other, even under rapid consecutive calls.
   Future<T> _runSequential<T>(Future<T> Function() operation) async {
     final previous = _activeOp;
     final completer = Completer<void>();
-    _activeOp = completer.future.catchError((_) {});
+    final currentFuture = completer.future.catchError((_) {});
+    _activeOp = currentFuture;
 
     if (previous != null) {
       try {
@@ -138,291 +120,543 @@ class PersistentDailyPhotoStore extends ChangeNotifier
     } catch (e, stack) {
       completer.completeError(e, stack);
       rethrow;
+    } finally {
+      if (identical(_activeOp, currentFuture)) {
+        _activeOp = null;
+      }
     }
   }
 
   /// Awaits completion of all currently active or queued disk operations.
-  /// Useful for lifecycle shutdowns, synchronization barriers, and deterministic testing.
   Future<void> flush() async {
-    while (_activeOp != null) {
-      final current = _activeOp;
+    final current = _activeOp;
+    if (current != null) {
       try {
         await current;
       } catch (_) {}
-      if (identical(_activeOp, current)) {
-        break;
-      }
     }
-    await _syncQueue.flush();
   }
 
-  /// Initializes the file directory, restores persisted photo metadata,
-  /// restores pending deletion tombstones, and initializes the sync outbox queue.
+  /// Initializes the file directory and restores persisted photo metadata from disk.
   Future<void> init({Directory? customBaseDir}) async {
-    if (customBaseDir != null) {
+    if (!_hasCustomDependencies && customBaseDir != null) {
       _fileManager = PhotoFileManager(customBaseDir: customBaseDir);
       _metadataStorage = PhotoMetadataStorage(customBaseDir: customBaseDir);
-      _syncQueue = SyncQueue(
-        storage: SyncQueueStorage(customBaseDir: customBaseDir),
-      );
-    } else {
-      final fallbackDir =
-          _fileManager.customBaseDir ?? _metadataStorage.customBaseDir;
-      if (fallbackDir != null && _syncQueue.storage.customBaseDir == null) {
-        _syncQueue = SyncQueue(
-          storage: SyncQueueStorage(customBaseDir: fallbackDir),
-        );
-      }
     }
 
     await _fileManager.init();
     await _metadataStorage.init();
-    await _syncQueue.init();
 
-    final loaded = await _metadataStorage.loadAll();
-    _entries.clear();
-    _entries.addAll(loaded);
-
-    final loadedDeletions = await _metadataStorage.loadPendingDeletions();
-    _pendingDeletions.clear();
-    _pendingDeletions.addAll(loadedDeletions);
-
-    // Crash recovery: ensure all restored pending deletions have a corresponding delete op in the queue.
-    // Index existing delete ops for O(1) checks across large queues.
-    final existingDeleteIds = _syncQueue.operations
-        .where(
-          (op) => op.type == SyncOperationType.delete && op.driveFileId != null,
-        )
-        .map((op) => op.driveFileId!)
-        .toSet();
-
-    for (final tombstone in _pendingDeletions) {
-      if (!existingDeleteIds.contains(tombstone.driveFileId)) {
-        await _syncQueue.enqueueDelete(
-          tombstone.dateKey,
-          driveFileId: tombstone.driveFileId,
-          authorizedEmail: tombstone.authorizedEmail,
-        );
-      }
-    }
+    final loaded = await _metadataStorage.loadDays();
+    _dayEntries.clear();
+    _dayEntries.addAll(loaded);
 
     _isInitialized = true;
     _invalidateCaches();
-
-    // Clean up any unreferenced orphan files from previous interrupted operations.
-    // Non-critical startup cleanup failures must never prevent the app from launching.
-    try {
-      await reconcileOrphanFiles();
-    } catch (e) {
-      debugPrint('Non-critical orphan reconciliation error during init: $e');
-    }
-
     notifyListeners();
   }
 
+  // ==========================================
+  // Day-Level Multi-Photo API
+  // ==========================================
+
+  /// Retrieves the day entry for the specified [DateKey], or null if unrecorded.
+  DayEntry? getDay(DateKey key) => _dayEntries[key];
+
+  /// Retrieves the day entry for the specified calendar [date], or null.
+  DayEntry? getDayByDate(DateTime date) =>
+      _dayEntries[DateKey.fromDateTime(date)];
+
+  /// Returns true if a day entry exists for [key].
+  bool hasDay(DateKey key) => _dayEntries.containsKey(key);
+
+  /// Returns true if a day entry exists for calendar [date].
+  bool hasDayByDate(DateTime date) =>
+      _dayEntries.containsKey(DateKey.fromDateTime(date));
+
+  /// Total count of unique recorded calendar days.
+  int get totalDays => _dayEntries.length;
+
+  /// Total count of individual photos across all recorded days.
   @override
-  PhotoEntry? getPhoto(DateTime date) {
-    return _entries[DateKey.fromDateTime(date)];
-  }
+  int get totalPhotos =>
+      _dayEntries.values.fold<int>(0, (sum, day) => sum + day.photoCount);
 
-  @override
-  PhotoEntry? getPhotoByKey(DateKey key) {
-    return _entries[key];
-  }
-
-  @override
-  bool hasPhoto(DateTime date) {
-    return _entries.containsKey(DateKey.fromDateTime(date));
-  }
-
-  @override
-  bool hasPhotoByKey(DateKey key) {
-    return _entries.containsKey(key);
-  }
-
-  @override
-  int get totalPhotos => _entries.length;
-
-  /// Total count of stored photos.
-  int get count => _entries.length;
-
-  /// Unmodifiable view of all stored photo entries.
-  List<PhotoEntry> get allEntries =>
-      _cachedAllEntries ??= List.unmodifiable(_entries.values);
+  /// Total count of stored photos (alias for [totalPhotos]).
+  int get count => totalPhotos;
 
   /// Unmodifiable view of all recorded DateKeys.
   List<DateKey> get recordedDates =>
-      _cachedRecordedDates ??= List.unmodifiable(_entries.keys);
+      _cachedRecordedDates ??= List.unmodifiable(_dayEntries.keys);
 
-  /// Chronological entries ordered newest-to-oldest (descending).
-  /// Memoized until store contents change.
+  /// Unmodifiable view of all day entries.
+  List<DayEntry> get allDayEntries =>
+      _cachedAllDayEntries ??= List.unmodifiable(_dayEntries.values);
+
+  /// Chronological day entries ordered newest-to-oldest (descending).
+  List<DayEntry> get chronologicalDayEntries {
+    if (_cachedChronologicalDayEntries != null) {
+      return _cachedChronologicalDayEntries!;
+    }
+    final sorted = _dayEntries.values.toList()
+      ..sort((a, b) => b.dateKey.compareTo(a.dateKey));
+    return _cachedChronologicalDayEntries = List.unmodifiable(sorted);
+  }
+
+  /// Chronological day entries ordered oldest-to-newest (ascending).
+  List<DayEntry> get chronologicalAscendingDayEntries {
+    if (_cachedChronologicalAscendingDayEntries != null) {
+      return _cachedChronologicalAscendingDayEntries!;
+    }
+    final sorted = _dayEntries.values.toList()
+      ..sort((a, b) => a.dateKey.compareTo(b.dateKey));
+    return _cachedChronologicalAscendingDayEntries = List.unmodifiable(sorted);
+  }
+
+  /// Unmodifiable view of all individual photo entries across all days.
+  List<PhotoEntry> get allEntries {
+    if (_cachedAllEntries != null) return _cachedAllEntries!;
+    final list = _dayEntries.values.expand((d) => d.photos).toList();
+    return _cachedAllEntries = List.unmodifiable(list);
+  }
+
+  /// Chronological photos ordered newest-to-oldest (descending).
   List<PhotoEntry> get chronologicalEntries {
     if (_cachedChronologicalEntries != null) {
       return _cachedChronologicalEntries!;
     }
-    final list = _entries.values.toList()
-      ..sort((a, b) => b.dateKey.compareTo(a.dateKey));
+    final list = _dayEntries.values.expand((d) => d.photos).toList()
+      ..sort((a, b) {
+        final cmp = b.dateKey.compareTo(a.dateKey);
+        if (cmp != 0) return cmp;
+        return a.order.compareTo(b.order);
+      });
     return _cachedChronologicalEntries = List.unmodifiable(list);
   }
 
-  /// Chronological entries ordered oldest-to-newest (ascending).
-  /// Memoized until store contents change.
+  /// Chronological photos ordered oldest-to-newest (ascending).
   List<PhotoEntry> get chronologicalAscendingEntries {
     if (_cachedChronologicalAscendingEntries != null) {
       return _cachedChronologicalAscendingEntries!;
     }
-    final list = _entries.values.toList()
-      ..sort((a, b) => a.dateKey.compareTo(b.dateKey));
+    final list = _dayEntries.values.expand((d) => d.photos).toList()
+      ..sort((a, b) {
+        final cmp = a.dateKey.compareTo(b.dateKey);
+        if (cmp != 0) return cmp;
+        return a.order.compareTo(b.order);
+      });
     return _cachedChronologicalAscendingEntries = List.unmodifiable(list);
   }
 
-  /// Saves or replaces a photo with full persistence lifecycle handling:
-  /// 1. Pre-validates source photo file (must exist and be non-empty).
-  /// 2. Copies the source photo into app-owned storage if needed.
-  /// 3. Resolves sync state: preserves Drive ID on replacement, marks [SyncStatus.pending]
-  ///    if replacing a synced photo, or uses [SyncStatus.localOnly] for new photos.
-  /// 4. Atomically commits metadata to disk with rollback on failure.
-  /// 5. Updates in-memory cache and safely cleans up any previous photo file.
-  Future<PhotoEntry> savePhoto({
-    required PhotoEntry entry,
+  // ==========================================
+  // Multi-Photo Storage Operations
+  // ==========================================
+
+  /// Adds a photo to a day without replacing existing photos.
+  ///
+  /// Guarantees:
+  /// - Unique persistent image file generated via [PhotoFileManager].
+  /// - Stable unique ID assigned to the photo.
+  /// - Preserves all existing photos on that date.
+  /// - Atomicity: metadata committed before in-memory state is updated; rollback on failure.
+  Future<PhotoEntry> addPhotoToDay({
+    required DateKey dateKey,
+    required PhotoEntry photo,
     String? sourceTempPath,
-  }) {
-    return _runSequential(
-      () => _savePhotoInternal(entry: entry, sourceTempPath: sourceTempPath),
-    );
+  }) async {
+    return await _runSequential(() async {
+      final existingDay = _dayEntries[dateKey];
+      String? persistentPath = photo.imagePath;
+
+      final pathToPersist = sourceTempPath ?? photo.imagePath;
+      if (pathToPersist != null && pathToPersist.isNotEmpty) {
+        final sourceFile = File(pathToPersist);
+        if (!sourceFile.existsSync()) {
+          throw FileSystemException(
+            'Source photo file does not exist',
+            pathToPersist,
+          );
+        }
+        final length = sourceFile.lengthSync();
+        if (length == 0) {
+          throw FileSystemException(
+            'Source photo file is empty (0 bytes)',
+            pathToPersist,
+          );
+        }
+
+        if (_isInitialized && !_fileManager.isManagedPath(pathToPersist)) {
+          persistentPath = await _fileManager.persistPhotoFile(
+            sourcePath: pathToPersist,
+            dateKey: dateKey,
+          );
+        }
+      }
+
+      final stableId = photo.id.isNotEmpty
+          ? photo.id
+          : 'photo_${dateKey.format()}_${DateTime.now().microsecondsSinceEpoch}_${existingDay?.photoCount ?? 0}';
+
+      final savedPhoto = photo.copyWith(
+        id: stableId,
+        order: existingDay?.photoCount ?? 0,
+        imagePath: persistentPath,
+        syncStatus: SyncStatus.localOnly,
+        lastModifiedAt: DateTime.now().toUtc(),
+        clearSyncError: true,
+      );
+
+      final DayEntry updatedDay;
+      if (existingDay != null) {
+        updatedDay = existingDay.addPhoto(savedPhoto);
+      } else {
+        updatedDay = DayEntry(
+          dateKey: dateKey,
+          photos: [savedPhoto],
+          note: '',
+          createdAt: photo.date.toUtc(),
+          updatedAt: DateTime.now().toUtc(),
+        );
+      }
+
+      // Two-Phase Commit: Prepare tentative entries map for disk write
+      final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+      tentative[dateKey] = updatedDay;
+
+      if (_isInitialized) {
+        try {
+          await _metadataStorage.saveDays(tentative);
+        } catch (e) {
+          if (persistentPath != null &&
+              !_fileManager.isManagedPath(pathToPersist ?? '')) {
+            await _fileManager.deletePhotoFile(persistentPath);
+          }
+          rethrow;
+        }
+      }
+
+      _dayEntries[dateKey] = updatedDay;
+      _invalidateCaches();
+      notifyListeners();
+      return savedPhoto;
+    });
   }
 
-  Future<PhotoEntry> _savePhotoInternal({
+  /// Saves a photo entry for its calendar day without replacing existing photos.
+  ///
+  /// If [entry] has an [id] matching an existing photo on that date, it updates
+  /// that photo's metadata (and image file, if [sourceTempPath] is provided) in place.
+  /// Otherwise, appends the photo to the day.
+  Future<PhotoEntry> savePhoto({
     required PhotoEntry entry,
     String? sourceTempPath,
   }) async {
     final key = entry.dateKey;
-    final oldEntry = _entries[key];
+    final existingDay = _dayEntries[key];
 
-    String? persistentPath = entry.imagePath;
+    // Check if updating an existing photo with matching ID in this day
+    if (existingDay != null &&
+        entry.id.isNotEmpty &&
+        existingDay.hasPhotoId(entry.id)) {
+      return await _runSequential(() async {
+        String? persistentPath = entry.imagePath;
+        final pathToPersist =
+            sourceTempPath ??
+            (entry.imagePath != null &&
+                    !_fileManager.isManagedPath(entry.imagePath!)
+                ? entry.imagePath
+                : null);
 
-    final pathToPersist = sourceTempPath ?? entry.imagePath;
-    if (pathToPersist != null && pathToPersist.isNotEmpty) {
-      final sourceFile = File(pathToPersist);
-      if (!sourceFile.existsSync()) {
-        throw FileSystemException(
-          'Source photo file does not exist',
-          pathToPersist,
+        String? oldManagedPath;
+        final oldPhoto = existingDay.getPhotoById(entry.id);
+        if (oldPhoto != null &&
+            oldPhoto.imagePath != null &&
+            _fileManager.isManagedPath(oldPhoto.imagePath!)) {
+          oldManagedPath = oldPhoto.imagePath;
+        }
+
+        if (pathToPersist != null && pathToPersist.isNotEmpty) {
+          final sourceFile = File(pathToPersist);
+          if (!sourceFile.existsSync()) {
+            throw FileSystemException(
+              'Source photo file does not exist',
+              pathToPersist,
+            );
+          }
+          final length = sourceFile.lengthSync();
+          if (length == 0) {
+            throw FileSystemException(
+              'Source photo file is empty (0 bytes)',
+              pathToPersist,
+            );
+          }
+
+          if (_isInitialized && !_fileManager.isManagedPath(pathToPersist)) {
+            persistentPath = await _fileManager.persistPhotoFile(
+              sourcePath: pathToPersist,
+              dateKey: key,
+            );
+          }
+        }
+
+        final updatedPhotos = existingDay.photos.map((p) {
+          if (p.id == entry.id) {
+            return entry.copyWith(
+              id: p.id,
+              order: p.order,
+              imagePath: persistentPath ?? p.imagePath,
+              lastModifiedAt: DateTime.now().toUtc(),
+            );
+          }
+          return p;
+        }).toList();
+
+        final updatedDay = existingDay.copyWith(
+          photos: updatedPhotos,
+          updatedAt: DateTime.now().toUtc(),
         );
-      }
-      final length = sourceFile.lengthSync();
-      if (length == 0) {
-        throw FileSystemException(
-          'Source photo file is empty (0 bytes)',
-          pathToPersist,
-        );
-      }
 
-      if (_isInitialized && !_fileManager.isManagedPath(pathToPersist)) {
-        persistentPath = await _fileManager.persistPhotoFile(
-          sourcePath: pathToPersist,
-          dateKey: key,
-        );
-      }
-    }
+        final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+        tentative[key] = updatedDay;
 
-    // Resolve synchronization state and remote metadata
-    SyncStatus resolvedSyncStatus;
-    String? driveFileId = entry.driveFileId;
-    String? driveFileRevision = entry.driveFileRevision;
-    String? authorizedEmail = entry.authorizedEmail;
+        if (_isInitialized) {
+          try {
+            await _metadataStorage.saveDays(tentative);
+          } catch (e) {
+            if (persistentPath != null &&
+                persistentPath != oldManagedPath &&
+                !_fileManager.isManagedPath(pathToPersist ?? '')) {
+              await _fileManager.deletePhotoFile(persistentPath);
+            }
+            rethrow;
+          }
+        }
 
-    if (oldEntry != null) {
-      // Replacement on existing DateKey
-      driveFileId ??= oldEntry.driveFileId;
-      driveFileRevision ??= oldEntry.driveFileRevision;
-      authorizedEmail ??= oldEntry.authorizedEmail;
-
-      if (oldEntry.syncStatus == SyncStatus.synced ||
-          oldEntry.syncStatus == SyncStatus.failed) {
-        resolvedSyncStatus = SyncStatus.pending;
-      } else {
-        resolvedSyncStatus = oldEntry.syncStatus;
-      }
-    } else {
-      // Brand new local photo
-      resolvedSyncStatus = entry.syncStatus;
-    }
-
-    final updatedEntry = entry.copyWith(
-      imagePath: persistentPath,
-      syncStatus: resolvedSyncStatus,
-      lastModifiedAt: DateTime.now().toUtc(),
-      driveFileId: driveFileId,
-      driveFileRevision: driveFileRevision,
-      authorizedEmail: authorizedEmail,
-      clearSyncError: true,
-    );
-
-    // Two-Phase Commit: Prepare tentative entries map for disk write
-    final tentative = Map<DateKey, PhotoEntry>.from(_entries);
-    tentative[key] = updatedEntry;
-
-    if (_isInitialized) {
-      try {
-        await _metadataStorage.saveAll(tentative);
-      } catch (e) {
-        // Rollback: if a new file was created and is different from oldEntry.imagePath, prune it
+        // Clean up old replaced photo file if a new file was persisted
         if (persistentPath != null &&
-            persistentPath != oldEntry?.imagePath &&
-            !_fileManager.isManagedPath(pathToPersist ?? '')) {
-          await _fileManager.deletePhotoFile(persistentPath);
+            oldManagedPath != null &&
+            persistentPath != oldManagedPath) {
+          await _fileManager.deletePhotoFile(oldManagedPath);
         }
-        rethrow;
-      }
 
-      // Metadata write succeeded. Now clean up old file if different.
-      if (oldEntry != null &&
-          oldEntry.hasRealImage &&
-          oldEntry.imagePath != persistentPath) {
-        await _fileManager.deletePhotoFile(oldEntry.imagePath);
-      }
-
-      // If this date previously had a pending cloud deletion, clear it now that a new photo exists
-      if (_pendingDeletions.any((t) => t.dateKey == key)) {
-        _pendingDeletions.removeWhere((t) => t.dateKey == key);
-        await _metadataStorage.savePendingDeletions(_pendingDeletions);
-      }
-
-      // SyncQueue: Enqueue remote operation if photo needs cloud synchronization
-      if (resolvedSyncStatus == SyncStatus.pending) {
-        if (oldEntry != null && oldEntry.driveFileId != null) {
-          await _syncQueue.enqueueUpdate(
-            key,
-            driveFileId: oldEntry.driveFileId,
-            authorizedEmail: oldEntry.authorizedEmail,
-          );
-        } else {
-          await _syncQueue.enqueueUpload(key, authorizedEmail: authorizedEmail);
-        }
-      }
+        _dayEntries[key] = updatedDay;
+        _invalidateCaches();
+        notifyListeners();
+        return updatedDay.getPhotoById(entry.id)!;
+      });
     }
 
-    // Update in-memory cache
-    _entries[key] = updatedEntry;
-    _invalidateCaches();
-    notifyListeners();
-    return updatedEntry;
+    return addPhotoToDay(
+      dateKey: key,
+      photo: entry,
+      sourceTempPath: sourceTempPath,
+    );
   }
 
-  /// Atomically updates metadata (title, caption, location) for an existing photo entry.
+  /// Explicitly replaces an individual photo in a day by its stable ID.
   ///
-  /// Guarantees:
-  /// - The underlying image file is NOT touched or duplicated.
-  /// - The DateKey identity is preserved, preventing duplicate photos for the same date.
-  /// - Sync state transitions from [SyncStatus.synced] or [SyncStatus.failed] to [SyncStatus.pending].
-  /// - [driveFileId] and [driveFileRevision] are safely preserved.
-  /// - If disk write fails, the in-memory cache rolls back and remains uncorrupted.
+  /// Preserves other photos in the day and the daily note intact.
+  Future<PhotoEntry> replacePhotoInDay({
+    required DateKey dateKey,
+    required String targetPhotoId,
+    required PhotoEntry newPhoto,
+    String? sourceTempPath,
+  }) async {
+    final photoWithTargetId = newPhoto.copyWith(
+      id: targetPhotoId,
+      date: dateKey.toDateTime(),
+    );
+    return savePhoto(entry: photoWithTargetId, sourceTempPath: sourceTempPath);
+  }
+
+  /// Removes an individual photo by stable ID.
+  ///
+  /// Removes an individual photo by stable ID.
+  ///
+  /// If [preserveNoteOnlyDay] is true and the day has a non-empty note,
+  /// the day entry is retained as a note-only day when its last photo is removed.
+  /// Otherwise, removes the empty day entry completely (returning null).
+  Future<DayEntry?> removePhotoById({
+    required DateKey dateKey,
+    required String photoId,
+    bool preserveNoteOnlyDay = false,
+  }) async {
+    return await _runSequential(() async {
+      final day = _dayEntries[dateKey];
+      if (day == null) return null;
+
+      final targetPhoto = day.getPhotoById(photoId);
+      if (targetPhoto == null) return day;
+
+      final updatedDay = day.removePhoto(photoId);
+
+      final shouldRetainDay =
+          updatedDay.isNotEmpty || (preserveNoteOnlyDay && updatedDay.hasNote);
+
+      final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+      if (shouldRetainDay) {
+        tentative[dateKey] = updatedDay;
+      } else {
+        tentative.remove(dateKey);
+      }
+
+      if (_isInitialized) {
+        await _metadataStorage.saveDays(tentative);
+        if (targetPhoto.hasRealImage) {
+          await _fileManager.deletePhotoFile(targetPhoto.imagePath);
+        }
+      }
+
+      if (shouldRetainDay) {
+        _dayEntries[dateKey] = updatedDay;
+      } else {
+        _dayEntries.remove(dateKey);
+      }
+
+      _invalidateCaches();
+      notifyListeners();
+      return shouldRetainDay ? updatedDay : null;
+    });
+  }
+
+  /// Reorders photos for [dateKey] according to [orderedPhotoIds].
+  Future<DayEntry> reorderPhotos({
+    required DateKey dateKey,
+    required List<String> orderedPhotoIds,
+  }) async {
+    return await _runSequential(() async {
+      final day = _dayEntries[dateKey];
+      if (day == null) {
+        throw StateError('No day entry found for date key $dateKey');
+      }
+
+      final updatedDay = day.reorderPhotos(orderedPhotoIds);
+
+      final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+      tentative[dateKey] = updatedDay;
+
+      if (_isInitialized) {
+        await _metadataStorage.saveDays(tentative);
+      }
+
+      _dayEntries[dateKey] = updatedDay;
+      _invalidateCaches();
+      notifyListeners();
+      return updatedDay;
+    });
+  }
+
+  /// Reads and updates the day's note.
+  ///
+  /// Supports creating a note for an empty day (note-only day).
+  /// If the note is cleared on a note-only day, the entry is cleanly pruned.
+  Future<DayEntry> updateDayNote({
+    required DateKey dateKey,
+    required String note,
+  }) async {
+    return await _runSequential(() async {
+      final day = _dayEntries[dateKey];
+      if (day == null) {
+        if (note.trim().isEmpty) {
+          return DayEntry(dateKey: dateKey, photos: const [], note: '');
+        }
+        final newDay = DayEntry(
+          dateKey: dateKey,
+          photos: const [],
+          note: note,
+          createdAt: DateTime.now().toUtc(),
+          updatedAt: DateTime.now().toUtc(),
+        );
+        final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+        tentative[dateKey] = newDay;
+        if (_isInitialized) {
+          await _metadataStorage.saveDays(tentative);
+        }
+        _dayEntries[dateKey] = newDay;
+        _invalidateCaches();
+        notifyListeners();
+        return newDay;
+      }
+
+      // If clearing note on an entry with no photos, prune it completely
+      if (day.photos.isEmpty && note.trim().isEmpty) {
+        final tentative = Map<DateKey, DayEntry>.from(_dayEntries)
+          ..remove(dateKey);
+        if (_isInitialized) {
+          await _metadataStorage.saveDays(tentative);
+        }
+        _dayEntries.remove(dateKey);
+        _invalidateCaches();
+        notifyListeners();
+        return DayEntry(dateKey: dateKey, photos: const [], note: '');
+      }
+
+      final updatedDay = day.updateNote(note);
+
+      final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+      tentative[dateKey] = updatedDay;
+
+      if (_isInitialized) {
+        await _metadataStorage.saveDays(tentative);
+      }
+
+      _dayEntries[dateKey] = updatedDay;
+      _invalidateCaches();
+      notifyListeners();
+      return updatedDay;
+    });
+  }
+
+  /// Deletes an entire day entry with explicit caller-controlled confirmation.
+  Future<bool> deleteDayEntry({
+    required DateKey dateKey,
+    required bool confirmed,
+  }) async {
+    if (!confirmed) return false;
+
+    return await _runSequential(() async {
+      final day = _dayEntries[dateKey];
+      if (day == null) return false;
+
+      final tentative = Map<DateKey, DayEntry>.from(_dayEntries)
+        ..remove(dateKey);
+
+      if (_isInitialized) {
+        await _metadataStorage.saveDays(tentative);
+        for (final photo in day.photos) {
+          if (photo.hasRealImage) {
+            await _fileManager.deletePhotoFile(photo.imagePath);
+          }
+        }
+      }
+
+      _dayEntries.remove(dateKey);
+      _invalidateCaches();
+      notifyListeners();
+      return true;
+    });
+  }
+
+  // ==========================================
+  // Backward Compatibility DailyPhotoStore APIs
+  // ==========================================
+
+  @override
+  PhotoEntry? getPhoto(DateTime date) => getDayByDate(date)?.primaryPhoto;
+
+  @override
+  PhotoEntry? getPhotoByKey(DateKey key) => getDay(key)?.primaryPhoto;
+
+  @override
+  bool hasPhoto(DateTime date) => hasDayByDate(date);
+
+  @override
+  bool hasPhotoByKey(DateKey key) => hasDay(key);
+
+  /// Atomically updates metadata (title, location) for an existing photo entry.
   Future<PhotoEntry> updatePhotoMetadata({
     required DateKey dateKey,
     String? title,
-    String? caption,
-    bool clearCaption = false,
     String? location,
     bool clearLocation = false,
   }) {
@@ -430,8 +664,6 @@ class PersistentDailyPhotoStore extends ChangeNotifier
       () => _updatePhotoMetadataInternal(
         dateKey: dateKey,
         title: title,
-        caption: caption,
-        clearCaption: clearCaption,
         location: location,
         clearLocation: clearLocation,
       ),
@@ -441,181 +673,120 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   Future<PhotoEntry> _updatePhotoMetadataInternal({
     required DateKey dateKey,
     String? title,
-    String? caption,
-    bool clearCaption = false,
     String? location,
     bool clearLocation = false,
   }) async {
-    final existing = _entries[dateKey];
-    if (existing == null) {
+    final day = _dayEntries[dateKey];
+    if (day == null || day.isEmpty) {
       throw StateError('No photo entry found for date key $dateKey');
     }
 
-    SyncStatus resolvedStatus = existing.syncStatus;
-    if (existing.syncStatus == SyncStatus.synced ||
-        existing.syncStatus == SyncStatus.failed) {
-      resolvedStatus = SyncStatus.pending;
+    final existing = day.primaryPhoto!;
+    final trimmedTitle = title?.trim();
+    final effectiveTitle = (trimmedTitle != null && trimmedTitle.isNotEmpty)
+        ? trimmedTitle
+        : existing.title;
+
+    final String? effectiveLocation;
+    if (clearLocation) {
+      effectiveLocation = null;
+    } else if (location != null) {
+      final trimmedLoc = location.trim();
+      effectiveLocation = trimmedLoc.isEmpty ? null : trimmedLoc;
+    } else {
+      effectiveLocation = existing.location;
     }
-
-    final bool shouldClearCaption =
-        clearCaption || (caption != null && caption.trim().isEmpty);
-    final String? resolvedCaption = shouldClearCaption
-        ? null
-        : (caption != null && caption.trim().isNotEmpty
-              ? caption.trim()
-              : existing.caption);
-
-    final bool shouldClearLocation =
-        clearLocation || (location != null && location.trim().isEmpty);
-    final String? resolvedLocation = shouldClearLocation
-        ? null
-        : (location != null && location.trim().isNotEmpty
-              ? location.trim()
-              : existing.location);
 
     final updated = existing.copyWith(
-      title: (title != null && title.trim().isNotEmpty)
-          ? title.trim()
-          : existing.title,
-      caption: resolvedCaption,
-      clearCaption: shouldClearCaption,
-      location: resolvedLocation,
-      clearLocation: shouldClearLocation,
-      syncStatus: resolvedStatus,
+      title: effectiveTitle,
+      location: effectiveLocation,
+      clearLocation:
+          clearLocation || (location != null && effectiveLocation == null),
       lastModifiedAt: DateTime.now().toUtc(),
-      clearSyncError: true,
     );
 
-    final tentative = Map<DateKey, PhotoEntry>.from(_entries);
-    tentative[dateKey] = updated;
+    final updatedPhotos = List<PhotoEntry>.from(day.photos);
+    updatedPhotos[0] = updated;
+    final updatedDay = day.copyWith(
+      photos: updatedPhotos,
+      updatedAt: DateTime.now().toUtc(),
+    );
+
+    final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+    tentative[dateKey] = updatedDay;
 
     if (_isInitialized) {
-      await _metadataStorage.saveAll(tentative);
-      if (resolvedStatus == SyncStatus.pending) {
-        await _syncQueue.enqueueUpdate(
-          dateKey,
-          driveFileId: existing.driveFileId,
-          authorizedEmail: existing.authorizedEmail,
-        );
-      }
+      await _metadataStorage.saveDays(tentative);
     }
 
-    _entries[dateKey] = updated;
+    _dayEntries[dateKey] = updatedDay;
     _invalidateCaches();
     notifyListeners();
     return updated;
   }
 
-  /// Updates synchronization metadata for an existing photo entry.
+  /// Convenience method for replacing or saving a photo for a specific date.
   ///
-  /// Used by future synchronization engines (Milestone 17/18/19) to mark
-  /// photos as synced (with remote IDs) or failed (with concise error descriptions).
-  Future<PhotoEntry> updateSyncStatus({
-    required DateKey dateKey,
-    required SyncStatus status,
-    String? driveFileId,
-    String? driveFileRevision,
-    String? syncError,
-    String? authorizedEmail,
-  }) {
-    return _runSequential(() async {
-      final existing = _entries[dateKey];
-      if (existing == null) {
-        throw StateError('No photo entry found for date key $dateKey');
-      }
-
-      final updated = existing.copyWith(
-        syncStatus: status,
-        driveFileId: driveFileId ?? existing.driveFileId,
-        driveFileRevision: driveFileRevision ?? existing.driveFileRevision,
-        syncError: syncError,
-        authorizedEmail: authorizedEmail ?? existing.authorizedEmail,
-        clearSyncError: syncError == null && status != SyncStatus.failed,
-      );
-
-      final tentative = Map<DateKey, PhotoEntry>.from(_entries);
-      tentative[dateKey] = updated;
-
-      if (_isInitialized) {
-        await _metadataStorage.saveAll(tentative);
-        if (status == SyncStatus.synced) {
-          await _syncQueue.removeOperationsForDate(dateKey);
-        } else if (status == SyncStatus.failed) {
-          final op = _syncQueue.getOperationForDate(dateKey);
-          if (op != null) {
-            await _syncQueue.markFailed(
-              op.id,
-              error: syncError ?? 'Sync failed',
-            );
-          }
-        }
-      }
-
-      _entries[dateKey] = updated;
-      _invalidateCaches();
-      notifyListeners();
-      return updated;
-    });
-  }
-
-  @override
-  void setPhoto(PhotoEntry entry) {
-    final key = entry.dateKey;
-    final oldEntry = _entries[key];
-
-    _entries[key] = entry;
-    _invalidateCaches();
-    notifyListeners();
-
-    // Trigger async background persistence with rollback on failure
-    if (_isInitialized) {
-      _runSequential(() async {
-        final tentative = Map<DateKey, PhotoEntry>.from(_entries);
-        await _metadataStorage.saveAll(tentative);
-        if (oldEntry != null &&
-            oldEntry.hasRealImage &&
-            oldEntry.imagePath != entry.imagePath) {
-          await _fileManager.deletePhotoFile(oldEntry.imagePath);
-        }
-        if (entry.syncStatus == SyncStatus.pending) {
-          if (entry.driveFileId != null) {
-            await _syncQueue.enqueueUpdate(
-              key,
-              driveFileId: entry.driveFileId,
-              authorizedEmail: entry.authorizedEmail,
-            );
-          } else {
-            await _syncQueue.enqueueUpload(
-              key,
-              authorizedEmail: entry.authorizedEmail,
-            );
-          }
-        } else if (entry.syncStatus == SyncStatus.synced) {
-          await _syncQueue.removeOperationsForDate(key);
-        }
-      }).catchError((e) {
-        debugPrint('Background metadata save error, rolling back: $e');
-        if (oldEntry != null) {
-          _entries[key] = oldEntry;
-        } else {
-          _entries.remove(key);
-        }
-        _invalidateCaches();
-        notifyListeners();
-      });
-    }
-  }
-
-  /// Convenience replacement method for a specific date.
+  /// If the date already has photos and [newEntry.id] is not explicitly specified,
+  /// replaces the day's primary photo.
   Future<PhotoEntry> replacePhotoAsync(
     DateTime date,
     PhotoEntry newEntry, {
     String? sourceTempPath,
   }) async {
+    final key = DateKey.fromDateTime(date);
+    final day = _dayEntries[key];
+    String targetId = newEntry.id;
+    if (targetId.isEmpty && day != null && day.photos.isNotEmpty) {
+      targetId = day.primaryPhoto!.id;
+    }
     return savePhoto(
-      entry: newEntry.copyWith(date: date),
+      entry: newEntry.copyWith(id: targetId, date: date),
       sourceTempPath: sourceTempPath,
     );
+  }
+
+  @override
+  void setPhoto(PhotoEntry entry) {
+    final key = entry.dateKey;
+    final existingDay = _dayEntries[key];
+
+    final DayEntry updatedDay;
+    if (existingDay != null) {
+      final matchesExisting = existingDay.photos.any(
+        (p) =>
+            (p.id.isNotEmpty && entry.id.isNotEmpty && p.id == entry.id) ||
+            p.effectiveId == entry.effectiveId,
+      );
+      if (matchesExisting ||
+          (existingDay.photos.length == 1 && entry.id.isEmpty)) {
+        updatedDay = existingDay.updatePhoto(entry);
+      } else {
+        updatedDay = existingDay.addPhoto(entry);
+      }
+    } else {
+      updatedDay = DayEntry.fromSinglePhoto(entry);
+    }
+
+    _dayEntries[key] = updatedDay;
+    _invalidateCaches();
+    notifyListeners();
+
+    if (_isInitialized) {
+      _runSequential(() async {
+        final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+        await _metadataStorage.saveDays(tentative);
+      }).catchError((e) {
+        debugPrint('Background metadata save error, rolling back: $e');
+        if (existingDay != null) {
+          _dayEntries[key] = existingDay;
+        } else {
+          _dayEntries.remove(key);
+        }
+        _invalidateCaches();
+        notifyListeners();
+      });
+    }
   }
 
   @override
@@ -625,148 +796,46 @@ class PersistentDailyPhotoStore extends ChangeNotifier
 
   @override
   void removePhotoByKey(DateKey key) {
-    final oldEntry = _entries[key];
-    if (oldEntry == null) return;
+    final day = _dayEntries[key];
+    if (day == null) return;
 
-    _entries.remove(key);
+    _dayEntries.remove(key);
     _invalidateCaches();
     notifyListeners();
 
     if (_isInitialized) {
       _runSequential(() async {
-        final tentative = Map<DateKey, PhotoEntry>.from(_entries);
-        await _metadataStorage.saveAll(tentative);
-        if (oldEntry.hasRealImage) {
-          await _fileManager.deletePhotoFile(oldEntry.imagePath);
+        final tentative = Map<DateKey, DayEntry>.from(_dayEntries);
+        await _metadataStorage.saveDays(tentative);
+        for (final photo in day.photos) {
+          if (photo.hasRealImage) {
+            await _fileManager.deletePhotoFile(photo.imagePath);
+          }
         }
-
-        // If the photo had a remote Google Drive copy, record a tombstone and queue remote delete
-        if (oldEntry.driveFileId != null) {
-          final tombstone = SyncTombstone(
-            dateKey: key,
-            driveFileId: oldEntry.driveFileId!,
-            deletedAt: DateTime.now().toUtc(),
-            authorizedEmail: oldEntry.authorizedEmail,
-          );
-          _pendingDeletions.add(tombstone);
-          _invalidateCaches();
-          await _metadataStorage.savePendingDeletions(_pendingDeletions);
-          await _syncQueue.enqueueDelete(
-            key,
-            driveFileId: oldEntry.driveFileId!,
-            authorizedEmail: oldEntry.authorizedEmail,
-          );
-        } else {
-          // Never synced local-only photo: prune any unexecuted upload/update
-          await _syncQueue.removeOperationsForDate(key);
-        }
-      }).catchError((e) {
-        debugPrint(
-          'Background metadata save after remove error, rolling back: $e',
-        );
-        _entries[key] = oldEntry;
-        _invalidateCaches();
-        notifyListeners();
       });
     }
   }
 
-  /// Asynchronously removes a photo, awaiting metadata update, file deletion,
-  /// and recording a [SyncTombstone] if the photo had a remote [driveFileId].
-  ///
-  /// Safe and idempotent: if no photo exists for [date], this is a clean no-op.
-  Future<void> removePhotoAsync(DateTime date) {
-    return _runSequential(() => _removePhotoAsyncInternal(date));
+  /// Removes photo asynchronously and flushes pending writes to disk.
+  Future<void> removePhotoAsync(DateTime date) async {
+    await removePhotoByKeyAsync(DateKey.fromDateTime(date));
   }
 
-  Future<void> _removePhotoAsyncInternal(DateTime date) async {
-    final key = DateKey.fromDateTime(date);
-    final oldEntry = _entries[key];
-    if (oldEntry == null) {
-      // Idempotent: nothing to remove
-      return;
-    }
-
-    final tentative = Map<DateKey, PhotoEntry>.from(_entries);
-    tentative.remove(key);
-
-    if (_isInitialized) {
-      await _metadataStorage.saveAll(tentative);
-      if (oldEntry.hasRealImage) {
-        await _fileManager.deletePhotoFile(oldEntry.imagePath);
-      }
-
-      // If the photo had a remote Google Drive copy, record a tombstone and queue remote delete
-      if (oldEntry.driveFileId != null) {
-        final tombstone = SyncTombstone(
-          dateKey: key,
-          driveFileId: oldEntry.driveFileId!,
-          deletedAt: DateTime.now().toUtc(),
-          authorizedEmail: oldEntry.authorizedEmail,
-        );
-        _pendingDeletions.add(tombstone);
-        await _metadataStorage.savePendingDeletions(_pendingDeletions);
-        await _syncQueue.enqueueDelete(
-          key,
-          driveFileId: oldEntry.driveFileId!,
-          authorizedEmail: oldEntry.authorizedEmail,
-        );
-      } else {
-        // Never synced local-only photo: prune any unexecuted upload/update
-        await _syncQueue.removeOperationsForDate(key);
-      }
-    }
-
-    _entries.remove(key);
-    _invalidateCaches();
-    notifyListeners();
+  /// Removes photo by key asynchronously and flushes pending writes to disk.
+  Future<void> removePhotoByKeyAsync(DateKey key) async {
+    await deleteDayEntry(dateKey: key, confirmed: true);
   }
 
-  /// Acknowledges and clears a pending cloud deletion tombstone once the remote
-  /// file has been deleted in Google Drive. Also removes the corresponding delete
-  /// operation from the sync outbox queue.
-  Future<void> acknowledgePendingDeletion(String driveFileId) {
-    return _runSequential(() async {
-      _pendingDeletions.removeWhere((t) => t.driveFileId == driveFileId);
-      _invalidateCaches();
-      if (_isInitialized) {
-        await _metadataStorage.savePendingDeletions(_pendingDeletions);
-        SyncOperation? deleteOp;
-        for (final op in _syncQueue.operations) {
-          if (op.type == SyncOperationType.delete &&
-              op.driveFileId == driveFileId) {
-            deleteOp = op;
-            break;
-          }
-        }
-        if (deleteOp != null) {
-          await _syncQueue.markCompleted(deleteOp.id);
-        }
-      }
-    });
-  }
-
-  /// Clears all pending deletion tombstones from disk and memory.
-  Future<void> clearPendingDeletions() {
-    return _runSequential(() async {
-      _pendingDeletions.clear();
-      _invalidateCaches();
-      if (_isInitialized) {
-        await _metadataStorage.clearPendingDeletions();
-      }
-    });
-  }
+  /// Whether a key has a pending deletion. In local-only mode, deletions are immediate.
+  bool hasPendingDeletion(DateKey key) => false;
 
   /// Reconciles local photo files on disk against the metadata registry.
-  ///
-  /// Identifies and safely deletes app-managed photo files that are no longer
-  /// referenced by any active photo entry in metadata.
-  /// Returns the list of pruned file paths.
   Future<List<String>> reconcileOrphanFiles() async {
     if (!_isInitialized) return [];
 
     try {
-      final referencedPaths = _entries.values
+      final referencedPaths = _dayEntries.values
+          .expand((day) => day.photos)
           .where((entry) => entry.hasRealImage)
           .map((entry) => entry.imagePath!)
           .toSet();
@@ -780,8 +849,7 @@ class PersistentDailyPhotoStore extends ChangeNotifier
 
   @override
   void clear() {
-    _entries.clear();
-    _pendingDeletions.clear();
+    _dayEntries.clear();
     LocalStorageCalculator.clearCache();
     _invalidateCaches();
     notifyListeners();
@@ -789,24 +857,21 @@ class PersistentDailyPhotoStore extends ChangeNotifier
       _runSequential(() async {
         await _metadataStorage.clear();
         await _fileManager.clearAll();
-        await _syncQueue.clear();
       }).catchError((e) {
         debugPrint('Clear storage error: $e');
       });
     }
   }
 
-  /// Asynchronously clears all photo entries, pending deletions, and photo files.
+  /// Asynchronously clears all photo entries and photo files.
   Future<void> clearAsync() {
     return _runSequential(() async {
-      _entries.clear();
-      _pendingDeletions.clear();
+      _dayEntries.clear();
       LocalStorageCalculator.clearCache();
       _invalidateCaches();
       if (_isInitialized) {
         await _metadataStorage.clear();
         await _fileManager.clearAll();
-        await _syncQueue.clear();
       }
       notifyListeners();
     });
@@ -815,68 +880,25 @@ class PersistentDailyPhotoStore extends ChangeNotifier
   /// Permanently removes all local diary data from the device:
   /// - All local photo files in managed storage
   /// - All local photo metadata
-  /// - All pending sync queue operations
-  /// - All pending deletion tombstones
-  ///
-  /// CRITICAL GUARANTEES:
-  /// - Does NOT delete or trash any photos from Google Drive.
-  /// - Does NOT enqueue any remote deletion operations to the sync queue.
-  /// - The user's Google Drive backup remains completely intact.
-  /// - Unrelated app preferences (notifications, theme, week start) are untouched.
   Future<void> deleteLocalDiary() async {
     await clearAsync();
   }
 
-  /// Updates local photo entries and sync queue when the user explicitly deletes
-  /// their Google Drive backup from the cloud.
-  ///
-  /// CRITICAL GUARANTEES:
-  /// - Local photo files on disk remain completely intact.
-  /// - All photo entries that had a remote [driveFileId] matching [authorizedEmail]
-  ///   (or all entries if [authorizedEmail] is omitted) have their cloud references
-  ///   cleared and transition cleanly to [SyncStatus.localOnly].
-  /// - Pending deletion tombstones are cleared since remote files are gone.
-  /// - Pending sync operations for this email/folder are pruned from the queue.
-  Future<void> onCloudBackupDeleted({String? authorizedEmail}) {
-    return _runSequential(() async {
-      bool changed = false;
-      for (final entry in _entries.values.toList()) {
-        final matchesEmail =
-            authorizedEmail == null ||
-            entry.authorizedEmail == null ||
-            entry.authorizedEmail == authorizedEmail;
-        if (matchesEmail &&
-            (entry.driveFileId != null ||
-                entry.syncStatus != SyncStatus.localOnly)) {
-          final updated = entry.copyWith(
-            syncStatus: SyncStatus.localOnly,
-            clearDriveFileId: true,
-            clearDriveFileRevision: true,
-            clearSyncError: true,
-            clearAuthorizedEmail: true,
-          );
-          _entries[entry.dateKey] = updated;
-          changed = true;
-        }
-      }
+  bool _isDisposed = false;
 
-      _pendingDeletions.removeWhere(
-        (t) =>
-            authorizedEmail == null ||
-            t.authorizedEmail == null ||
-            t.authorizedEmail == authorizedEmail,
-      );
+  /// Whether this store instance has been disposed.
+  bool get isDisposed => _isDisposed;
 
-      if (_isInitialized) {
-        if (changed) {
-          await _metadataStorage.saveAll(_entries);
-        }
-        await _metadataStorage.savePendingDeletions(_pendingDeletions);
-        await _syncQueue.clear();
-      }
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
 
-      _invalidateCaches();
-      notifyListeners();
-    });
+  @override
+  void notifyListeners() {
+    if (!_isDisposed) {
+      super.notifyListeners();
+    }
   }
 }

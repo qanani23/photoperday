@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:photo_per_day/core/constants/app_constants.dart';
+import 'package:photo_per_day/data/services/app_theme_service.dart';
 import 'package:photo_per_day/core/theme/app_colors.dart';
 import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_shadows.dart';
@@ -8,11 +10,8 @@ import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_presentation_model.dart';
 import 'package:photo_per_day/data/services/memory_service.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
-import 'package:photo_per_day/data/services/sync_coordinator.dart';
-import 'package:photo_per_day/data/services/sync_worker.dart';
 import 'package:photo_per_day/screens/camera/camera_screen.dart';
 import 'package:photo_per_day/screens/diary/swipe_days_screen.dart';
 import 'package:photo_per_day/screens/photo_detail/photo_detail_screen.dart';
@@ -64,15 +63,13 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
   void initState() {
     super.initState();
     _store.addListener(_onStoreUpdated);
-    SyncWorker.instance.addListener(_onStoreUpdated);
-    SyncCoordinator.instance.addListener(_onStoreUpdated);
+    AppThemeService.instance.addListener(_onStoreUpdated);
   }
 
   @override
   void dispose() {
     _store.removeListener(_onStoreUpdated);
-    SyncWorker.instance.removeListener(_onStoreUpdated);
-    SyncCoordinator.instance.removeListener(_onStoreUpdated);
+    AppThemeService.instance.removeListener(_onStoreUpdated);
     super.dispose();
   }
 
@@ -143,14 +140,13 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
       final newEntry = PhotoEntry(
         date: now,
         title: 'Daily Capture',
-        caption: 'Captured moment from today.',
         location: source == PhotoSource.camera
             ? 'Camera Capture'
             : 'Photo Library',
         timeFormatted: formattedTime,
         imagePath: capturedPath,
         icon: Icons.camera_alt_rounded,
-        gradientColors: const [AppColors.accent, AppColors.surfaceDark],
+        gradientColors: [AppColors.accent, AppColors.surfaceDark],
       );
 
       try {
@@ -172,19 +168,27 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
   @override
   Widget build(BuildContext context) {
     final memories = _getMemories();
+    final isDark = AppColors.current.isDark;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(memories.length),
-            Expanded(
-              child: memories.isEmpty
-                  ? _buildEmptyState()
-                  : _buildMemoriesList(memories),
-            ),
-          ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(memories.length),
+              Expanded(
+                child: memories.isEmpty
+                    ? _buildEmptyState()
+                    : _buildMemoriesList(memories),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -216,7 +220,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_rounded,
               color: AppColors.textPrimary,
               size: 22.0,
@@ -230,7 +234,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('On This Day', style: AppTypography.appTitle),
+                Text('On This Day', style: AppTypography.appTitle),
                 const SizedBox(height: 2.0),
                 Text(
                   formattedMonthDay.toUpperCase(),
@@ -260,7 +264,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
             ),
             const SizedBox(width: AppSpacing.xs),
             IconButton(
-              icon: const Icon(
+              icon: Icon(
                 Icons.view_carousel_rounded,
                 color: AppColors.accent,
                 size: 22.0,
@@ -318,7 +322,6 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
 
     final hasMetadata =
         entry.title.isNotEmpty ||
-        (entry.caption != null && entry.caption!.trim().isNotEmpty) ||
         (entry.location != null && entry.location!.trim().isNotEmpty);
 
     return Container(
@@ -350,7 +353,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.history_rounded,
                         size: 13.0,
                         color: AppColors.accent,
@@ -358,7 +361,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
                       const SizedBox(width: 4.0),
                       Text(
                         relativeYearLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
                           color: AppColors.accent,
@@ -418,7 +421,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
                   if (entry.title.isNotEmpty) ...[
                     Text(
                       entry.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16.0,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
@@ -428,26 +431,13 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
                     ),
                     const SizedBox(height: AppSpacing.xs),
                   ],
-                  if (entry.caption != null &&
-                      entry.caption!.trim().isNotEmpty) ...[
-                    Text(
-                      entry.caption!,
-                      style: const TextStyle(
-                        fontSize: 13.0,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.textSecondary,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                  ],
                   if (entry.location != null &&
                       entry.location!.trim().isNotEmpty) ...[
                     const SizedBox(height: 2.0),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.location_on_outlined,
                           size: 13.0,
                           color: AppColors.textMuted,
@@ -477,7 +467,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
               horizontal: AppSpacing.md,
               vertical: AppSpacing.xs,
             ),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.surfaceSubtle,
               border: Border(
                 top: BorderSide(color: AppColors.border, width: 0.8),
@@ -541,33 +531,27 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
   }
 
   Widget _buildSyncChip(PhotoEntry entry) {
-    final presentation = PhotoSyncPresentation.forEntry(entry);
-    return Semantics(
-      label: presentation.semanticLabel,
-      child: Tooltip(
-        message: presentation.detailLabel,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.5),
-          decoration: BoxDecoration(
-            color: presentation.color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(6.0),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(6.0),
+        border: Border.all(color: AppColors.border, width: 0.6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_rounded, size: 10.5, color: AppColors.statDaysGreen),
+          const SizedBox(width: 3.5),
+          Text(
+            'Local',
+            style: TextStyle(
+              fontSize: 10.0,
+              fontWeight: FontWeight.w600,
+              color: AppColors.statDaysGreen,
+            ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(presentation.icon, size: 10.5, color: presentation.color),
-              const SizedBox(width: 3.5),
-              Text(
-                presentation.label,
-                style: TextStyle(
-                  fontSize: 10.0,
-                  fontWeight: FontWeight.w600,
-                  color: presentation.color,
-                ),
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -604,14 +588,14 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.border),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.history_toggle_off_rounded,
                 size: 36.0,
                 color: AppColors.textMuted,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            const Text(
+            Text(
               'No memories from this day yet',
               style: TextStyle(
                 fontSize: 18.0,
@@ -623,7 +607,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Memories from $formattedMonthDay will appear here when you have captured photos on this date in previous years.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14.0,
                 fontWeight: FontWeight.w400,
                 color: AppColors.textSecondary,
@@ -638,7 +622,7 @@ class _MemoriesScreenState extends State<MemoriesScreen> {
               label: const Text("Capture Today's Photo"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accent,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.accentForeground,
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.xl,
                   vertical: AppSpacing.md,

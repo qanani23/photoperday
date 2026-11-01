@@ -4,7 +4,7 @@ import 'package:photo_per_day/data/models/photo_entry.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/streak_service.dart';
 
-/// Immutable summary of the user's overall photo journaling statistics.
+/// Immutable summary of the user's algorithmic statistics derived from the synchronized diary.
 @immutable
 class StatisticsSummary {
   const StatisticsSummary({
@@ -17,20 +17,54 @@ class StatisticsSummary {
     required this.currentMonthCount,
     required this.currentYearCount,
     required this.monthlyCountsForCurrentYear,
+    this.endedStreakCount = 0,
+    this.streakCount = 0,
+    this.averageStreakLength = 0.0,
+    this.longestGapDays = 0,
+    this.mostActiveMonth,
+    this.mostActiveMonthCount = 0,
+    this.yearlyCounts = const {},
+    this.weeklyCounts = const {},
+    this.weekdayCounts = const {},
+    this.totalMissedDays = 0,
+    this.isCurrentStreakActive = false,
   });
 
-  /// The total number of persisted photo entries on or before today.
-  /// Because of the ONE PHOTO PER DAY rule, this equals [totalRecordedDays].
+  /// The total number of synchronized photo entries on or before today.
   final int totalPhotos;
 
   /// The number of unique calendar days containing a photo on or before today.
   final int totalRecordedDays;
 
-  /// The current consecutive streak ending today (delegated to [StreakService]).
+  /// Total synchronized photo days (alias for totalRecordedDays).
+  int get totalSynchronizedDays => totalRecordedDays;
+
+  /// The current consecutive streak ending today or yesterday (derived from [StreakService]).
   final int currentStreak;
 
-  /// The longest consecutive streak anywhere in history (delegated to [StreakService]).
+  /// The longest consecutive streak anywhere in history (derived from [StreakService]).
   final int longestStreak;
+
+  /// Whether the current streak is actively ongoing.
+  final bool isCurrentStreakActive;
+
+  /// Number of completed/ended streak runs.
+  final int endedStreakCount;
+
+  /// Total count of distinct streak runs across history.
+  final int streakCount;
+
+  /// Average length of streak runs.
+  final double averageStreakLength;
+
+  /// Longest gap (in missing calendar days) between photo entries.
+  final int longestGapDays;
+
+  /// Most active month in the current year (1..12), or null if no photos.
+  final int? mostActiveMonth;
+
+  /// Photo count in the most active month.
+  final int mostActiveMonthCount;
 
   /// The earliest recorded photo date (or null if no photos exist).
   final DateKey? firstPhotoDate;
@@ -46,6 +80,18 @@ class StatisticsSummary {
 
   /// Map of month numbers (1..12) to photo counts for the current calendar year.
   final Map<int, int> monthlyCountsForCurrentYear;
+
+  /// Map of calendar years to total photo counts for each year.
+  final Map<int, int> yearlyCounts;
+
+  /// Map of ISO week representations ('YYYY-Wxx') to photo counts.
+  final Map<String, int> weeklyCounts;
+
+  /// Map of ISO weekday numbers (1 = Monday, 7 = Sunday) to photo counts.
+  final Map<int, int> weekdayCounts;
+
+  /// Total missing days between first photo date and today.
+  final int totalMissedDays;
 
   /// Whether the user has recorded at least one photo.
   bool get hasPhotos => totalRecordedDays > 0;
@@ -83,6 +129,17 @@ class StatisticsSummary {
     currentMonthCount: 0,
     currentYearCount: 0,
     monthlyCountsForCurrentYear: {},
+    endedStreakCount: 0,
+    streakCount: 0,
+    averageStreakLength: 0.0,
+    longestGapDays: 0,
+    mostActiveMonth: null,
+    mostActiveMonthCount: 0,
+    yearlyCounts: {},
+    weeklyCounts: {},
+    weekdayCounts: {},
+    totalMissedDays: 0,
+    isCurrentStreakActive: false,
   );
 
   @override
@@ -98,6 +155,8 @@ class StatisticsSummary {
           latestPhotoDate == other.latestPhotoDate &&
           currentMonthCount == other.currentMonthCount &&
           currentYearCount == other.currentYearCount &&
+          endedStreakCount == other.endedStreakCount &&
+          longestGapDays == other.longestGapDays &&
           mapEquals(
             monthlyCountsForCurrentYear,
             other.monthlyCountsForCurrentYear,
@@ -113,27 +172,24 @@ class StatisticsSummary {
     latestPhotoDate,
     currentMonthCount,
     currentYearCount,
-    Object.hashAll(monthlyCountsForCurrentYear.keys),
-    Object.hashAll(monthlyCountsForCurrentYear.values),
+    endedStreakCount,
+    longestGapDays,
   );
 
   @override
   String toString() =>
       'StatisticsSummary(totalPhotos: $totalPhotos, recordedDays: $totalRecordedDays, '
       'currentStreak: $currentStreak, longestStreak: $longestStreak, '
-      'first: $firstPhotoDate, latest: $latestPhotoDate, '
-      'month: $currentMonthCount, year: $currentYearCount)';
+      'endedStreaks: $endedStreakCount, avgStreak: $averageStreakLength, longestGap: $longestGapDays)';
 }
 
-/// Domain service for deriving calm, accurate statistics from photo journal records.
+/// Domain service for deriving calm, accurate statistics algorithmically from synchronized diary data (Milestone 44).
 ///
-/// Rules:
-/// - Authoritative source: [PersistentDailyPhotoStore] / provided DateKeys.
-/// - Pure/read-only, synchronous, in-memory computation.
-/// - Excludes future dates strictly.
-/// - Operates defensively on unique [DateKey]s.
-/// - Reuses [StreakService] for current and longest streak calculations.
-/// - Supports deterministic testing via injected date keys and reference todayKey.
+/// Principles:
+/// - Authoritative source: successfully synchronized photo dates.
+/// - Pure/read-only in-memory computation.
+/// - Never stores mutable counter databases.
+/// - Reuses [StreakService] for streak run calculations.
 class StatisticsService {
   StatisticsService._internal();
 
@@ -153,23 +209,43 @@ class StatisticsService {
     _memoizedSummary = null;
   }
 
+  /// Calculates an ISO week identifier string for a given [DateKey] (e.g. '2026-W11').
+  static String formatIsoWeek(DateKey key) {
+    final dt = DateTime(key.year, key.month, key.day);
+    // Find Thursday in current week
+    final dayOfWeek = dt.weekday; // 1 = Monday, 7 = Sunday
+    final thursday = dt.add(Duration(days: 4 - dayOfWeek));
+    final year = thursday.year;
+    final firstDayOfYear = DateTime(year, 1, 1);
+    final dayOfYear = thursday.difference(firstDayOfYear).inDays + 1;
+    final weekNumber = ((dayOfYear - 1) / 7).floor() + 1;
+    return '$year-W${weekNumber.toString().padLeft(2, '0')}';
+  }
+
   /// Calculates a [StatisticsSummary] from the provided entries/keys or from
-  /// [PersistentDailyPhotoStore.instance].
-  ///
-  /// [todayKey] or [todayDate] defines "today" for calculation (defaults to local today).
+  /// the active [PersistentDailyPhotoStore].
   StatisticsSummary calculateStatistics({
     DateTime? todayDate,
     DateKey? todayKey,
+    DateTime? referenceDate,
+    Iterable<DateTime>? dates,
     List<PhotoEntry>? entries,
     Iterable<DateKey>? dateKeys,
     PersistentDailyPhotoStore? store,
     StreakService? streakService,
+    bool allowYesterdayActive = true,
   }) {
     final effectiveTodayKey =
         todayKey ??
-        (todayDate != null ? DateKey.fromDateTime(todayDate) : DateKey.today());
+        (referenceDate != null
+            ? DateKey.fromDateTime(referenceDate)
+            : (todayDate != null
+                  ? DateKey.fromDateTime(todayDate)
+                  : DateKey.today()));
 
-    final isFromStore = (dateKeys == null && entries == null);
+    final effectiveDateKeys = dateKeys ?? dates?.map(DateKey.fromDateTime);
+
+    final isFromStore = (effectiveDateKeys == null && entries == null);
     final effectiveStore = store ?? PersistentDailyPhotoStore.instance;
 
     if (isFromStore &&
@@ -180,17 +256,28 @@ class StatisticsService {
       return _memoizedSummary!;
     }
 
-    // 1. Gather candidate DateKeys
+    final effectiveStreakService = streakService ?? StreakService.instance;
+
+    // 1. Calculate streak metrics using StreakService
+    final streakSummary = effectiveStreakService.calculateStreak(
+      todayKey: effectiveTodayKey,
+      entries: entries,
+      dateKeys: effectiveDateKeys,
+      store: effectiveStore,
+      allowYesterdayActive: allowYesterdayActive,
+    );
+
+    // 2. Resolve the candidate dates evaluated by the streak calculation
     final Iterable<DateKey> candidateKeys;
-    if (dateKeys != null) {
-      candidateKeys = dateKeys;
+    if (effectiveDateKeys != null) {
+      candidateKeys = effectiveDateKeys;
     } else if (entries != null) {
       candidateKeys = entries.map((e) => e.dateKey);
     } else {
-      candidateKeys = effectiveStore.recordedDates;
+      candidateKeys = effectiveStore.allEntries.map((e) => e.dateKey);
     }
 
-    // 2. Filter out future dates and deduplicate defensively
+    // 3. Filter out future dates and deduplicate defensively
     final validKeys = <DateKey>{};
     for (final key in candidateKeys) {
       if (key.compareTo(effectiveTodayKey) <= 0) {
@@ -198,15 +285,7 @@ class StatisticsService {
       }
     }
 
-    // 3. Delegate streak calculation to StreakService
-    final effectiveStreakService = streakService ?? StreakService.instance;
-    final streakSummary = effectiveStreakService.calculateStreak(
-      todayKey: effectiveTodayKey,
-      dateKeys: validKeys,
-    );
-
     if (validKeys.isEmpty) {
-      // Build 12-month zero-count map for current year
       final emptyMonths = <int, int>{};
       for (int m = 1; m <= 12; m++) {
         emptyMonths[m] = 0;
@@ -221,6 +300,17 @@ class StatisticsService {
         currentMonthCount: 0,
         currentYearCount: 0,
         monthlyCountsForCurrentYear: emptyMonths,
+        endedStreakCount: 0,
+        streakCount: 0,
+        averageStreakLength: 0.0,
+        longestGapDays: 0,
+        mostActiveMonth: null,
+        mostActiveMonthCount: 0,
+        yearlyCounts: const {},
+        weeklyCounts: const {},
+        weekdayCounts: const {},
+        totalMissedDays: 0,
+        isCurrentStreakActive: false,
       );
       if (isFromStore) {
         _memoizedStore = effectiveStore;
@@ -231,20 +321,30 @@ class StatisticsService {
       return summary;
     }
 
-    // 4. Sort valid keys to determine earliest and latest recorded dates
+    // 4. Sort valid keys chronologically
     final sortedKeys = validKeys.toList()..sort();
     final firstPhotoDate = sortedKeys.first;
     final latestPhotoDate = sortedKeys.last;
 
-    // 5. Calculate current-month, current-year, and monthly breakdown
+    // 5. Aggregate yearly, monthly, weekly, and weekday counts
     int currentMonthCount = 0;
     int currentYearCount = 0;
     final monthlyCounts = <int, int>{};
     for (int m = 1; m <= 12; m++) {
       monthlyCounts[m] = 0;
     }
+    final yearlyCounts = <int, int>{};
+    final weeklyCounts = <String, int>{};
+    final weekdayCounts = <int, int>{};
+    for (int w = 1; w <= 7; w++) {
+      weekdayCounts[w] = 0;
+    }
 
     for (final key in sortedKeys) {
+      // Yearly count
+      yearlyCounts[key.year] = (yearlyCounts[key.year] ?? 0) + 1;
+
+      // Current year monthly counts
       if (key.year == effectiveTodayKey.year) {
         currentYearCount++;
         monthlyCounts[key.month] = (monthlyCounts[key.month] ?? 0) + 1;
@@ -252,10 +352,53 @@ class StatisticsService {
           currentMonthCount++;
         }
       }
+
+      // Weekly count
+      final weekKey = formatIsoWeek(key);
+      weeklyCounts[weekKey] = (weeklyCounts[weekKey] ?? 0) + 1;
+
+      // Weekday count (1 = Mon, 7 = Sun)
+      final dt = DateTime(key.year, key.month, key.day);
+      weekdayCounts[dt.weekday] = (weekdayCounts[dt.weekday] ?? 0) + 1;
+    }
+
+    // 6. Find most active month in current year
+    int? mostActiveMonth;
+    int mostActiveMonthCount = 0;
+    for (int m = 1; m <= 12; m++) {
+      final count = monthlyCounts[m] ?? 0;
+      if (count > mostActiveMonthCount) {
+        mostActiveMonthCount = count;
+        mostActiveMonth = m;
+      }
+    }
+
+    // 7. Calculate average streak length
+    final double avgStreak = streakSummary.runs.isEmpty
+        ? 0.0
+        : validKeys.length / streakSummary.runs.length;
+
+    // 8. Calculate total missed days between first photo date and today
+    final totalSpanDays =
+        StreakService.calendarDaysBetween(firstPhotoDate, effectiveTodayKey) +
+        1;
+    final totalMissedDays = (totalSpanDays - validKeys.length).clamp(0, 999999);
+
+    final int resolvedTotalPhotos;
+    if (entries != null) {
+      resolvedTotalPhotos = entries
+          .where((e) => e.dateKey.compareTo(effectiveTodayKey) <= 0)
+          .length;
+    } else if (effectiveDateKeys != null) {
+      resolvedTotalPhotos = validKeys.length;
+    } else {
+      resolvedTotalPhotos = effectiveStore.allEntries
+          .where((e) => e.dateKey.compareTo(effectiveTodayKey) <= 0)
+          .length;
     }
 
     final summary = StatisticsSummary(
-      totalPhotos: streakSummary.totalRecordedDays,
+      totalPhotos: resolvedTotalPhotos,
       totalRecordedDays: streakSummary.totalRecordedDays,
       currentStreak: streakSummary.currentStreak,
       longestStreak: streakSummary.longestStreak,
@@ -264,6 +407,17 @@ class StatisticsService {
       currentMonthCount: currentMonthCount,
       currentYearCount: currentYearCount,
       monthlyCountsForCurrentYear: monthlyCounts,
+      endedStreakCount: streakSummary.endedStreakCount,
+      streakCount: streakSummary.streakCount,
+      averageStreakLength: double.parse(avgStreak.toStringAsFixed(1)),
+      longestGapDays: streakSummary.longestGapDays,
+      mostActiveMonth: mostActiveMonth,
+      mostActiveMonthCount: mostActiveMonthCount,
+      yearlyCounts: Map.unmodifiable(yearlyCounts),
+      weeklyCounts: Map.unmodifiable(weeklyCounts),
+      weekdayCounts: Map.unmodifiable(weekdayCounts),
+      totalMissedDays: totalMissedDays,
+      isCurrentStreakActive: streakSummary.isCurrentStreakActive,
     );
 
     if (isFromStore) {
@@ -275,4 +429,21 @@ class StatisticsService {
 
     return summary;
   }
+
+  /// Convenience method to compute statistics from active store.
+  StatisticsSummary getStatistics({
+    PersistentDailyPhotoStore? store,
+    DateKey? todayKey,
+    DateTime? referenceDate,
+  }) => calculateStatistics(
+    store: store,
+    todayKey: todayKey,
+    referenceDate: referenceDate,
+  );
+
+  /// Convenience method to compute statistics directly from a list of [DateTime]s.
+  StatisticsSummary calculateStatisticsFromDates({
+    required List<DateTime> dates,
+    DateTime? referenceDate,
+  }) => calculateStatistics(dates: dates, referenceDate: referenceDate);
 }

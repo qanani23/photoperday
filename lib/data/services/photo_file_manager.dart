@@ -30,7 +30,12 @@ class PhotoFileManager {
     if (customBaseDir != null) {
       _photosDir = Directory(p.join(customBaseDir!.path, 'photos'));
     } else {
-      final docDir = await getApplicationDocumentsDirectory();
+      Directory docDir;
+      try {
+        docDir = await getApplicationDocumentsDirectory();
+      } catch (_) {
+        docDir = Directory.systemTemp;
+      }
       _photosDir = Directory(p.join(docDir.path, 'photos'));
     }
 
@@ -39,9 +44,9 @@ class PhotoFileManager {
     }
   }
 
-  /// Pattern matching app-managed photo files: `YYYY-MM-DD_<timestamp>.<ext>`
+  /// Pattern matching app-managed photo files: `YYYY-MM-DD_<timestamp>(_<counter>)?.<ext>`
   static final RegExp appPhotoFilePattern = RegExp(
-    r'^\d{4}-\d{2}-\d{2}_\d+\.[a-zA-Z0-9]+$',
+    r'^\d{4}-\d{2}-\d{2}_\d+(_\d+)?\.[a-zA-Z0-9]+$',
   );
 
   /// Copies a temporary or external photo [sourcePath] into app-controlled persistent storage.
@@ -68,10 +73,17 @@ class PhotoFileManager {
     final ext = p.extension(sourcePath).isNotEmpty
         ? p.extension(sourcePath)
         : '.jpg';
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = '${dateKey.format()}_$timestamp$ext';
-    final targetPath = p.join(photosDir.path, fileName);
-    final targetFile = File(targetPath);
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    var fileName = '${dateKey.format()}_$timestamp$ext';
+    var targetPath = p.join(photosDir.path, fileName);
+    var targetFile = File(targetPath);
+    int counter = 1;
+    while (targetFile.existsSync()) {
+      fileName = '${dateKey.format()}_${timestamp}_$counter$ext';
+      targetPath = p.join(photosDir.path, fileName);
+      targetFile = File(targetPath);
+      counter++;
+    }
 
     try {
       // Copy source file to app storage
@@ -94,6 +106,17 @@ class PhotoFileManager {
     }
 
     return targetFile.path;
+  }
+
+  /// Creates a target File destination for downloading a remote photo from Google Drive.
+  File createRemoteDestinationFile({
+    required DateKey dateKey,
+    String extension = '.jpg',
+  }) {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ext = extension.startsWith('.') ? extension : '.$extension';
+    final fileName = '${dateKey.format()}_$timestamp$ext';
+    return File(p.join(photosDir.path, fileName));
   }
 
   /// Safely deletes a photo file by its path.

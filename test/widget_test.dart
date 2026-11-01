@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_per_day/app.dart';
+import 'package:photo_per_day/core/routing/app_router.dart';
+import 'package:photo_per_day/data/models/photo_entry.dart';
+import 'package:photo_per_day/data/services/mock_photo_service.dart';
+import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/screens/camera/camera_screen.dart';
+import 'package:photo_per_day/screens/home/home_screen.dart';
 import 'package:photo_per_day/screens/main_shell.dart';
 import 'package:photo_per_day/screens/photo_detail/photo_detail_screen.dart';
+import 'package:photo_per_day/screens/settings/settings_screen.dart';
+import 'package:photo_per_day/widgets/app_icon_button.dart';
 import 'package:photo_per_day/widgets/bottom_nav_dock.dart';
-import 'package:photo_per_day/widgets/day_preview_card.dart';
 import 'package:photo_per_day/widgets/photo_source_sheet.dart';
+import 'package:photo_per_day/widgets/settings_tile.dart';
 
 void main() {
   testWidgets('App verification smoke test', (WidgetTester tester) async {
@@ -21,7 +28,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify app title and MainShell
-    expect(find.text('Photo a Day'), findsWidgets);
+    expect(find.text('Daria'), findsWidgets);
     expect(find.byType(MainShell), findsOneWidget);
     expect(find.byType(BottomNavDock), findsOneWidget);
   });
@@ -40,16 +47,24 @@ void main() {
     await tester.pumpAndSettle();
 
     // 1. Initial tab is Calendar (Home)
-    expect(find.text('March 2026'), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.text('This Month'), findsOneWidget);
 
-    // 2. Switch to Today tab via BottomNavDock
+    // 2. Tap Capture opens direct camera
     final captureTab = find.descendant(
       of: find.byType(BottomNavDock),
       matching: find.text('Capture'),
     );
     await tester.tap(captureTab);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(CameraScreen), findsOneWidget);
+
+    // Pop back to Home from camera
+    await tester.tap(find.byTooltip('Cancel').first);
     await tester.pumpAndSettle();
-    expect(find.text('Today'), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.text('This Month'), findsOneWidget);
 
     // 3. Switch to Profile tab via BottomNavDock
     final meTab = find.descendant(
@@ -58,8 +73,9 @@ void main() {
     );
     await tester.tap(meTab);
     await tester.pumpAndSettle();
-    expect(find.text('Profile & Settings'), findsOneWidget);
-    expect(find.text('Sarah Jenkins'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Daily Photo Diary'), findsOneWidget);
+    expect(find.text('Local-Only Storage'), findsOneWidget);
 
     // 4. Return to Home tab via BottomNavDock
     final homeTab = find.descendant(
@@ -68,10 +84,24 @@ void main() {
     );
     await tester.tap(homeTab);
     await tester.pumpAndSettle();
-    expect(find.text('March 2026'), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.text('This Month'), findsOneWidget);
+
+    // 5. Navigate to Settings via top-right Settings header action
+    final settingsButton = find.widgetWithText(AppHeaderAction, 'Settings');
+    expect(settingsButton, findsOneWidget);
+    await tester.tap(settingsButton);
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
+
+    // Pop back to Home
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.text('This Month'), findsOneWidget);
   });
 
-  testWidgets('Photo detail navigation from DayPreviewCard', (
+  testWidgets('Photo detail navigation from Home memory timeline', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1080, 2340);
@@ -81,17 +111,26 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
+    final testDate = DateTime(2026, 3, 3);
+    await PersistentDailyPhotoStore.instance.savePhoto(
+      entry: PhotoEntry(
+        date: testDate,
+        title: 'Coffee & Morning Journal',
+        timeFormatted: '10:00 AM',
+        gradientColors: const [Color(0xFFB86B35), Color(0xFF2B2823)],
+      ),
+    );
+
     await tester.pumpWidget(const PhotoPerDayApp());
     await tester.pumpAndSettle();
 
-    // Find the DayPreviewCard and scroll it into view if needed
-    final previewCardFinder = find.byType(DayPreviewCard);
-    expect(previewCardFinder, findsOneWidget);
+    // Find the showcase memory card in the timeline
+    final memoryCardFinder = find.byKey(
+      const ValueKey('timeline_day_2026-03-03'),
+    );
+    expect(memoryCardFinder, findsOneWidget);
 
-    await tester.ensureVisible(previewCardFinder);
-    await tester.pumpAndSettle();
-
-    await tester.tap(previewCardFinder);
+    await tester.tap(memoryCardFinder);
     await tester.pumpAndSettle();
 
     // Verify PhotoDetailScreen is displayed
@@ -104,7 +143,7 @@ void main() {
 
     // Verify returned to Calendar
     expect(find.byType(PhotoDetailScreen), findsNothing);
-    expect(find.text('March 2026'), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
   });
 
   testWidgets('Profile daily reminder toggle state updates', (
@@ -130,7 +169,10 @@ void main() {
 
     // Verify initial reminder state
     expect(find.text('Daily Reminder'), findsOneWidget);
-    final switchFinder = find.byType(Switch);
+    final switchFinder = find.descendant(
+      of: find.widgetWithText(SettingsTile, 'Daily Reminder'),
+      matching: find.byType(Switch),
+    );
     expect(switchFinder, findsOneWidget);
 
     // Toggle switch
@@ -153,7 +195,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Switch should still be rendered with preserved state
-    expect(find.byType(Switch), findsOneWidget);
+    expect(switchFinder, findsOneWidget);
   });
 
   testWidgets('Today screen toggle between photo captured and empty state', (
@@ -166,15 +208,18 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
+    final now = DateTime.now();
+    await PersistentDailyPhotoStore.instance.savePhoto(
+      entry: MockPhotoService.defaultTodayPhoto.copyWith(
+        date: DateTime(now.year, now.month, now.day),
+      ),
+    );
+
     await tester.pumpWidget(const PhotoPerDayApp());
     await tester.pumpAndSettle();
 
-    // Navigate to Today tab
-    final captureTab = find.descendant(
-      of: find.byType(BottomNavDock),
-      matching: find.text('Capture'),
-    );
-    await tester.tap(captureTab);
+    // Navigate to Today tab via AppRouter
+    AppRouter.navigateToToday();
     await tester.pumpAndSettle();
 
     // Initially has photo: should show Photo toggle pill and Replace Photo button

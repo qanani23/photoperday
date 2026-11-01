@@ -11,8 +11,6 @@ import 'package:photo_per_day/data/services/notification_client.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-import 'package:photo_per_day/data/services/sync_queue.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
 
 class ScheduledRecord {
   const ScheduledRecord({
@@ -181,7 +179,7 @@ void main() {
       final record = client.scheduled[1001];
       expect(record, isNotNull);
       expect(record!.id, DailyReminderService.reminderNotificationId);
-      expect(record.title, 'Photo a Day');
+      expect(record.title, 'Daria');
       expect(record.body, "Capture today's memory.");
       expect(record.hour, 20);
       expect(record.minute, 0);
@@ -312,14 +310,10 @@ void main() {
       () async {
         final metaStorage = PhotoMetadataStorage(customBaseDir: tempDir);
         final fileManager = PhotoFileManager(customBaseDir: tempDir);
-        final queueStorage = SyncQueueStorage(customBaseDir: tempDir);
-        final syncQueue = SyncQueue(storage: queueStorage);
-        await syncQueue.init();
 
         final photoStore = PersistentDailyPhotoStore(
           metadataStorage: metaStorage,
           fileManager: fileManager,
-          syncQueue: syncQueue,
         );
         await photoStore.init();
 

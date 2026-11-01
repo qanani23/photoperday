@@ -41,7 +41,7 @@ void main() {
           date: DateTime(2026, 3, 15),
           title: 'Original Memory',
           gradientColors: const [Colors.purple, Colors.indigo],
-          caption: 'Before capture',
+          location: 'Before capture',
         );
 
         final withImage = original.copyWith(
@@ -52,7 +52,7 @@ void main() {
         expect(withImage.hasRealImage, isTrue);
         expect(withImage.imagePath, '/path/to/capture.jpg');
         expect(withImage.title, 'After Capture');
-        expect(withImage.caption, 'Before capture');
+        expect(withImage.location, 'Before capture');
         expect(withImage.date, original.date);
         expect(withImage.gradientColors, original.gradientColors);
       },

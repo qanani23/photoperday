@@ -83,7 +83,7 @@ class ExportResult {
 /// - **Local-First**: Operates strictly on the local photo store without needing
 ///   Google Drive connectivity, credentials, or network access.
 /// - **Clean Metadata**: Generates a standard JSON manifest with versioning, dates,
-///   titles, captions, and locations. Never includes OAuth tokens, secrets, or internal sync state.
+///   titles, and locations. Never includes OAuth tokens, secrets, or internal sync state.
 /// - **Memory Efficient**: Streams photo files directly to the ZIP archive on disk
 ///   without loading the entire photo library into RAM.
 /// - **Resilient**: Gracefully handles missing, empty, or unreadable photo files,
@@ -219,8 +219,6 @@ class DiaryExportService {
             'date': dateKeyStr,
             'filename': safeArchiveFilename,
             'title': entry.title,
-            if (entry.caption != null && entry.caption!.trim().isNotEmpty)
-              'caption': entry.caption!.trim(),
             if (entry.location != null && entry.location!.trim().isNotEmpty)
               'location': entry.location!.trim(),
             'category': entry.category,
@@ -256,7 +254,7 @@ class DiaryExportService {
       final manifestMap = <String, dynamic>{
         'exportVersion': currentExportVersion,
         'exportedAt': DateTime.now().toUtc().toIso8601String(),
-        'appName': 'Photo a Day',
+        'appName': 'Daria',
         'totalPhotos': exportedPhotos.length,
         'photos': exportedPhotos,
         if (skippedPhotos.isNotEmpty) 'skippedPhotos': skippedPhotos,

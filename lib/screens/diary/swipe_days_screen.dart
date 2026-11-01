@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:photo_per_day/core/constants/app_constants.dart';
+import 'package:photo_per_day/core/layout/app_breakpoints.dart';
 import 'package:photo_per_day/core/theme/app_colors.dart';
 import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_shadows.dart';
@@ -9,10 +10,8 @@ import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_presentation_model.dart';
+import 'package:photo_per_day/data/services/app_theme_service.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
-import 'package:photo_per_day/data/services/sync_coordinator.dart';
-import 'package:photo_per_day/data/services/sync_worker.dart';
 import 'package:photo_per_day/screens/camera/camera_screen.dart';
 import 'package:photo_per_day/services/gallery_photo_service.dart';
 import 'package:photo_per_day/widgets/photo_source_sheet.dart';
@@ -22,12 +21,14 @@ import 'package:photo_per_day/widgets/visual_diary_entry.dart';
 class SwipeDaysArguments {
   const SwipeDaysArguments({
     this.initialDateKey,
+    this.initialPhotoId,
     this.filterDateKeys,
     this.customTitle,
     this.customSubtitle,
   });
 
   final DateKey? initialDateKey;
+  final String? initialPhotoId;
   final List<DateKey>? filterDateKeys;
   final String? customTitle;
   final String? customSubtitle;
@@ -47,6 +48,7 @@ class SwipeDaysScreen extends StatefulWidget {
   const SwipeDaysScreen({
     super.key,
     this.initialDateKey,
+    this.initialPhotoId,
     this.store,
     this.onCaptureTap,
     this.filterDateKeys,
@@ -56,6 +58,9 @@ class SwipeDaysScreen extends StatefulWidget {
 
   /// Optional specific date to open the viewer onto.
   final DateKey? initialDateKey;
+
+  /// Optional specific photo ID to open the viewer onto.
+  final String? initialPhotoId;
 
   /// Injected store instance (defaults to [PersistentDailyPhotoStore.instance]).
   final PersistentDailyPhotoStore? store;
@@ -96,7 +101,25 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
     }
     _updateEntries();
 
-    if (widget.initialDateKey != null) {
+    if (widget.initialPhotoId != null) {
+      final foundIndex = _entries.indexWhere(
+        (e) =>
+            e.effectiveId == widget.initialPhotoId ||
+            e.id == widget.initialPhotoId,
+      );
+      if (foundIndex >= 0) {
+        _currentIndex = foundIndex;
+      } else if (widget.initialDateKey != null) {
+        final dateIndex = _entries.indexWhere(
+          (e) => e.dateKey == widget.initialDateKey,
+        );
+        _currentIndex = dateIndex >= 0
+            ? dateIndex
+            : (_entries.isNotEmpty ? _entries.length - 1 : 0);
+      } else {
+        _currentIndex = _entries.isNotEmpty ? _entries.length - 1 : 0;
+      }
+    } else if (widget.initialDateKey != null) {
       final foundIndex = _entries.indexWhere(
         (e) => e.dateKey == widget.initialDateKey,
       );
@@ -118,15 +141,13 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
     _pageController = PageController(initialPage: _currentIndex);
 
     _store.addListener(_onStoreUpdated);
-    SyncWorker.instance.addListener(_onStoreUpdated);
-    SyncCoordinator.instance.addListener(_onStoreUpdated);
+    AppThemeService.instance.addListener(_onStoreUpdated);
   }
 
   @override
   void dispose() {
     _store.removeListener(_onStoreUpdated);
-    SyncWorker.instance.removeListener(_onStoreUpdated);
-    SyncCoordinator.instance.removeListener(_onStoreUpdated);
+    AppThemeService.instance.removeListener(_onStoreUpdated);
     _pageController.dispose();
     super.dispose();
   }
@@ -212,10 +233,9 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
   }
 
   void _openDetail(PhotoEntry entry) {
-    Navigator.of(context).pushNamed(
-      AppConstants.photoDetailRoute,
-      arguments: _store.getPhotoByKey(entry.dateKey) ?? entry,
-    );
+    Navigator.of(
+      context,
+    ).pushNamed(AppConstants.photoDetailRoute, arguments: entry);
   }
 
   Future<void> _promptPhotoCapture() async {
@@ -241,11 +261,10 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
       final newEntry = PhotoEntry(
         date: now,
         title: '',
-        caption: null,
         location: null,
         timeFormatted: TimeOfDay.fromDateTime(now).format(context),
         imagePath: capturedPath,
-        gradientColors: const [AppColors.accent, AppColors.surfaceDark],
+        gradientColors: [AppColors.accent, AppColors.surfaceDark],
       );
 
       try {
@@ -266,11 +285,12 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = AppColors.current.isDark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
         backgroundColor: AppColors.background,
@@ -313,6 +333,26 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
   }
 
   Widget _buildHeader(PhotoEntry currentEntry, int index, int total) {
+    final day = _store.getDay(currentEntry.dateKey);
+    final isMultiPhotoDay = day != null && day.photos.length > 1;
+    final dayPhotoIndex = day != null
+        ? day.photos.indexWhere(
+            (p) => p.effectiveId == currentEntry.effectiveId,
+          )
+        : -1;
+    final currentDayPosition = isMultiPhotoDay && dayPhotoIndex >= 0
+        ? dayPhotoIndex + 1
+        : 1;
+    final dayTotal = isMultiPhotoDay ? day.photos.length : 1;
+
+    final pillText = isMultiPhotoDay
+        ? '$currentDayPosition of $dayTotal'
+        : '${index + 1} of $total';
+
+    final subtitleText = isMultiPhotoDay
+        ? 'Photo $currentDayPosition of $dayTotal • ${index + 1} of $total'
+        : '${index + 1} of $total ${widget.customSubtitle ?? "recorded days"}';
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.pageHorizontal,
@@ -321,7 +361,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_rounded,
               color: AppColors.textPrimary,
               size: 22.0,
@@ -341,7 +381,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
                 ),
                 const SizedBox(height: 2.0),
                 Text(
-                  '${index + 1} of $total ${widget.customSubtitle ?? "recorded days"}',
+                  subtitleText,
                   style: AppTypography.caption.copyWith(
                     fontWeight: FontWeight.w600,
                     color: AppColors.textSecondary,
@@ -350,7 +390,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
               ],
             ),
           ),
-          // Position Pill Badge
+          // Position Pill Badge (e.g. "2 of 5" for multi-photo days)
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 10.0,
@@ -362,7 +402,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
               border: Border.all(color: AppColors.border, width: 0.8),
             ),
             child: Text(
-              '${index + 1} of $total',
+              pillText,
               style: AppTypography.caption.copyWith(
                 fontWeight: FontWeight.w700,
                 fontSize: 11.5,
@@ -373,7 +413,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
           const SizedBox(width: AppSpacing.xs),
           // Photo Details Action
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.info_outline_rounded,
               color: AppColors.textPrimary,
               size: 22.0,
@@ -388,8 +428,6 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
 
   Widget _buildPageItem(PhotoEntry entry) {
     final hasTitle = entry.title.trim().isNotEmpty;
-    final hasCaption =
-        entry.caption != null && entry.caption!.trim().isNotEmpty;
     final hasLocation =
         entry.location != null && entry.location!.trim().isNotEmpty;
     final hasTime = entry.timeFormatted.trim().isNotEmpty;
@@ -403,7 +441,9 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
       ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640.0),
+          constraints: const BoxConstraints(
+            maxWidth: AppBreakpoints.maxDiaryWidth,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -451,7 +491,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
               // Date, Time & Sync Status Row
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.calendar_today_rounded,
                     size: 13.5,
                     color: AppColors.accent,
@@ -460,7 +500,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
                   Expanded(
                     child: Text(
                       formattedDate,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
@@ -485,12 +525,12 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
               ),
 
               // Optional Diary Metadata
-              if (hasTitle || hasCaption || hasLocation) ...[
+              if (hasTitle || hasLocation) ...[
                 const SizedBox(height: AppSpacing.sm),
                 if (hasTitle)
                   Text(
                     entry.title.trim(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18.0,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textPrimary,
@@ -499,24 +539,11 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                if (hasCaption) ...[
-                  const SizedBox(height: 5.0),
-                  Text(
-                    entry.caption!.trim(),
-                    style: const TextStyle(
-                      fontSize: 14.5,
-                      color: AppColors.textSecondary,
-                      height: 1.45,
-                    ),
-                    maxLines: 6,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
                 if (hasLocation) ...[
                   const SizedBox(height: 7.0),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.location_on_outlined,
                         size: 14.0,
                         color: AppColors.textMuted,
@@ -538,6 +565,192 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
                 ],
               ],
 
+              // Intra-day multi-photo thumbnail strip
+              if (_store.getDay(entry.dateKey) != null &&
+                  _store.getDay(entry.dateKey)!.photos.length > 1) ...[
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10.0,
+                    vertical: 8.0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(10.0),
+                    border: Border.all(color: AppColors.border, width: 0.8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Photos on this date (${_store.getDay(entry.dateKey)!.photos.indexWhere((p) => p.effectiveId == entry.effectiveId) + 1} of ${_store.getDay(entry.dateKey)!.photos.length})',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6.0,
+                              vertical: 2.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentLight,
+                              borderRadius: BorderRadius.circular(6.0),
+                            ),
+                            child: Text(
+                              '${_store.getDay(entry.dateKey)!.photos.length} photos',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.accent,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6.0),
+                      SizedBox(
+                        height: 48.0,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: _store
+                              .getDay(entry.dateKey)!
+                              .photos
+                              .length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(width: AppSpacing.xs),
+                          itemBuilder: (context, pIndex) {
+                            final p = _store
+                                .getDay(entry.dateKey)!
+                                .photos[pIndex];
+                            final isSelected =
+                                p.effectiveId == entry.effectiveId;
+                            return GestureDetector(
+                              onTap: () {
+                                final globalIdx = _entries.indexWhere(
+                                  (e) => e.effectiveId == p.effectiveId,
+                                );
+                                if (globalIdx >= 0 &&
+                                    _pageController.hasClients) {
+                                  _pageController.animateToPage(
+                                    globalIdx,
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeInOut,
+                                  );
+                                }
+                              },
+                              child: Container(
+                                width: 48.0,
+                                height: 48.0,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(6.0),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppColors.accent
+                                        : AppColors.border,
+                                    width: isSelected ? 2.0 : 0.8,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(5.0),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      (p.hasRealImage && p.isImageFileAvailable)
+                                          ? Image.file(
+                                              File(p.imagePath!),
+                                              cacheWidth: 120,
+                                              cacheHeight: 120,
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (
+                                                    context,
+                                                    error,
+                                                    stackTrace,
+                                                  ) => _buildFallbackPhoto(p),
+                                            )
+                                          : _buildFallbackPhoto(p),
+                                      Positioned(
+                                        bottom: 1.5,
+                                        right: 1.5,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 3.0,
+                                            vertical: 0.5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(
+                                              alpha: 0.65,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              2.5,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '${pIndex + 1}',
+                                            style: const TextStyle(
+                                              fontSize: 7.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Daily Note card if present
+              if (_store.getDay(entry.dateKey) != null &&
+                  _store.getDay(entry.dateKey)!.note.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceSubtle,
+                    borderRadius: BorderRadius.circular(10.0),
+                    border: Border.all(color: AppColors.border, width: 0.6),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.notes_rounded,
+                        size: 15.0,
+                        color: AppColors.accent,
+                      ),
+                      const SizedBox(width: 8.0),
+                      Expanded(
+                        child: Text(
+                          _store.getDay(entry.dateKey)!.note,
+                          style: AppTypography.caption.copyWith(
+                            fontSize: 12.0,
+                            color: AppColors.textPrimary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: AppSpacing.sm),
             ],
           ),
@@ -555,13 +768,15 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
         horizontal: AppSpacing.pageHorizontal,
         vertical: AppSpacing.sm,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border, width: 0.8)),
       ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640.0),
+          constraints: const BoxConstraints(
+            maxWidth: AppBreakpoints.maxDiaryWidth,
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -604,7 +819,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
                     label: const Text('View Details'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.border),
+                      side: BorderSide(color: AppColors.border),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14.0,
                         vertical: 8.0,
@@ -673,33 +888,27 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
   }
 
   Widget _buildSyncChip(PhotoEntry entry) {
-    final presentation = PhotoSyncPresentation.forEntry(entry);
-    return Semantics(
-      label: presentation.semanticLabel,
-      child: Tooltip(
-        message: presentation.detailLabel,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.5),
-          decoration: BoxDecoration(
-            color: presentation.color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(6.0),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(6.0),
+        border: Border.all(color: AppColors.border, width: 0.6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_rounded, size: 10.5, color: AppColors.statDaysGreen),
+          const SizedBox(width: 3.5),
+          Text(
+            'Local',
+            style: TextStyle(
+              fontSize: 10.0,
+              fontWeight: FontWeight.w600,
+              color: AppColors.statDaysGreen,
+            ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(presentation.icon, size: 10.5, color: presentation.color),
-              const SizedBox(width: 3.5),
-              Text(
-                presentation.label,
-                style: TextStyle(
-                  fontSize: 10.0,
-                  fontWeight: FontWeight.w600,
-                  color: presentation.color,
-                ),
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -714,18 +923,18 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
             Container(
               width: 80.0,
               height: 80.0,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.surfaceSubtle,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.view_carousel_rounded,
                 size: 40.0,
                 color: AppColors.accent,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            const Text(
+            Text(
               'No Photos to Browse',
               style: TextStyle(
                 fontSize: 20.0,
@@ -735,7 +944,7 @@ class _SwipeDaysScreenState extends State<SwipeDaysScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            const Text(
+            Text(
               'Once you capture your daily photos, you can swipe chronologically through your memories here.',
               textAlign: TextAlign.center,
               style: TextStyle(

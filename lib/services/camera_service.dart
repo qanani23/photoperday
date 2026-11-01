@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 
@@ -11,7 +12,7 @@ enum CameraStatus {
 }
 
 /// Lightweight service abstracting camera hardware discovery, controller lifecycle,
-/// flash settings, lens flipping, and photo capture.
+/// flash settings, lens flipping, webcam selection, and photo capture across Android and Windows.
 class CameraService {
   CameraController? _controller;
   List<CameraDescription> _cameras = [];
@@ -21,6 +22,7 @@ class CameraService {
 
   CameraController? get controller => _controller;
   List<CameraDescription> get cameras => _cameras;
+  int get selectedCameraIndex => _selectedCameraIndex;
   CameraStatus get status => _status;
   String? get errorMessage => _errorMessage;
   bool get isReady =>
@@ -29,6 +31,18 @@ class CameraService {
       _controller!.value.isInitialized;
   bool get hasMultipleCameras => _cameras.length > 1;
 
+  CameraDescription? get currentCamera =>
+      _cameras.isNotEmpty && _selectedCameraIndex < _cameras.length
+      ? _cameras[_selectedCameraIndex]
+      : null;
+
+  String get currentCameraName {
+    final camera = currentCamera;
+    if (camera == null) return 'Camera';
+    if (camera.name.trim().isNotEmpty) return camera.name;
+    return 'Camera ${_selectedCameraIndex + 1}';
+  }
+
   CameraLensDirection get currentLensDirection {
     if (_cameras.isEmpty || _selectedCameraIndex >= _cameras.length) {
       return CameraLensDirection.back;
@@ -36,7 +50,7 @@ class CameraService {
     return _cameras[_selectedCameraIndex].lensDirection;
   }
 
-  /// Discovers available cameras and initializes the primary (back) camera.
+  /// Discovers available cameras and initializes the default camera.
   Future<void> initialize() async {
     _status = CameraStatus.initializing;
     _errorMessage = null;
@@ -45,11 +59,13 @@ class CameraService {
       _cameras = await availableCameras();
       if (_cameras.isEmpty) {
         _status = CameraStatus.error;
-        _errorMessage = 'No camera hardware found on this device.';
+        _errorMessage = !kIsWeb && Platform.isWindows
+            ? 'No webcam or camera hardware detected. Please connect a USB webcam and retry.'
+            : 'No camera hardware found on this device.';
         return;
       }
 
-      // Default to the first back camera if available
+      // Default to back camera on mobile if present, otherwise first available (e.g. webcam on Windows)
       _selectedCameraIndex = _cameras.indexWhere(
         (c) => c.lensDirection == CameraLensDirection.back,
       );
@@ -85,17 +101,30 @@ class CameraService {
       _errorMessage = null;
     } on CameraException catch (e) {
       _handleCameraException(e);
+    } catch (e) {
+      _status = CameraStatus.error;
+      _errorMessage = 'Failed to initialize camera preview: $e';
     }
   }
 
   void _handleCameraException(CameraException e) {
+    final isWindows = !kIsWeb && Platform.isWindows;
     switch (e.code) {
       case 'CameraAccessDenied':
       case 'CameraAccessDeniedWithoutPrompt':
       case 'CameraAccessRestricted':
+      case 'cameraNotFound':
+      case 'noAvailableCameras':
         _status = CameraStatus.permissionDenied;
+        _errorMessage = isWindows
+            ? 'Camera access was denied by Windows. Please ensure camera access is enabled in Windows Settings > Privacy & security > Camera.'
+            : 'Camera access was denied. Please grant permission in settings to take photos.';
+        break;
+      case 'CameraInUse':
+      case 'cameraInUse':
+        _status = CameraStatus.error;
         _errorMessage =
-            'Camera access was denied. Please grant permission in settings to take photos.';
+            'The selected camera is currently in use by another application. Please close other camera apps and retry.';
         break;
       default:
         _status = CameraStatus.error;
@@ -105,11 +134,12 @@ class CameraService {
     }
   }
 
-  /// Switches between front and back camera lenses.
-  Future<void> switchCamera() async {
-    if (_cameras.length <= 1) return;
+  /// Switches to the specific camera at [index].
+  Future<void> selectCamera(int index) async {
+    if (index < 0 || index >= _cameras.length) return;
+    if (_selectedCameraIndex == index && isReady) return;
 
-    _selectedCameraIndex = (_selectedCameraIndex + 1) % _cameras.length;
+    _selectedCameraIndex = index;
     _status = CameraStatus.initializing;
     try {
       await _initController(_cameras[_selectedCameraIndex]);
@@ -117,6 +147,13 @@ class CameraService {
       _status = CameraStatus.error;
       _errorMessage = 'Failed to switch camera: $e';
     }
+  }
+
+  /// Switches between available cameras sequentially.
+  Future<void> switchCamera() async {
+    if (_cameras.length <= 1) return;
+    final nextIndex = (_selectedCameraIndex + 1) % _cameras.length;
+    await selectCamera(nextIndex);
   }
 
   /// Captures a photo and returns the temporary [XFile] produced by the camera.

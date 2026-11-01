@@ -28,7 +28,7 @@ class EmptyStatePlaceholder extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.surfaceSubtle,
                 shape: BoxShape.circle,
               ),

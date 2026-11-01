@@ -457,13 +457,17 @@ void main() {
       final stats3 = StatisticsService.instance.calculateStatistics(
         todayKey: todayKey,
         store: store,
+        allowYesterdayActive: false,
       );
       expect(
         identical(stats1, stats3),
         isFalse,
         reason: 'Store mutation must invalidate memoized statistics',
       );
-      expect(stats3.currentStreak, equals(0)); // Today was removed
+      expect(
+        stats3.currentStreak,
+        equals(0),
+      ); // Today was removed (strict today mode)
     });
   });
 

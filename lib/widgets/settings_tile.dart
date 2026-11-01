@@ -69,7 +69,7 @@ class SettingsTile extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
@@ -98,7 +98,7 @@ class SettingsTile extends StatelessWidget {
               trailing!,
             ] else if (showChevron) ...[
               const SizedBox(width: AppSpacing.sm),
-              const Icon(
+              Icon(
                 Icons.chevron_right_rounded,
                 size: 20.0,
                 color: AppColors.textMuted,

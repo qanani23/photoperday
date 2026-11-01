@@ -9,14 +9,14 @@ class AppCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16.0),
-    this.backgroundColor = AppColors.surface,
+    this.backgroundColor,
     this.borderRadius = AppRadii.card,
     this.hasBorder = true,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final Color backgroundColor;
+  final Color? backgroundColor;
   final BorderRadius borderRadius;
   final bool hasBorder;
 
@@ -25,7 +25,7 @@ class AppCard extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: backgroundColor ?? AppColors.surface,
         borderRadius: borderRadius,
         border: hasBorder
             ? Border.all(color: AppColors.border, width: 1.0)

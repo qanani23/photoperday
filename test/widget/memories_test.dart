@@ -5,15 +5,11 @@ import 'package:photo_per_day/core/constants/app_constants.dart';
 import 'package:photo_per_day/core/routing/app_router.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_operation.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
-import 'package:photo_per_day/data/models/sync_tombstone.dart';
 import 'package:photo_per_day/data/services/memory_service.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-import 'package:photo_per_day/data/services/sync_queue.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
 import 'package:photo_per_day/screens/diary/memories_screen.dart';
 import 'package:photo_per_day/screens/diary/swipe_days_screen.dart';
 import 'package:photo_per_day/screens/photo_detail/photo_detail_screen.dart';
@@ -22,7 +18,6 @@ class WidgetMemoriesTestFakePhotoMetadataStorage extends PhotoMetadataStorage {
   WidgetMemoriesTestFakePhotoMetadataStorage({super.customBaseDir});
 
   final Map<DateKey, PhotoEntry> _memory = {};
-  final List<SyncTombstone> _deletions = [];
 
   @override
   Future<void> init() async {}
@@ -37,19 +32,8 @@ class WidgetMemoriesTestFakePhotoMetadataStorage extends PhotoMetadataStorage {
   }
 
   @override
-  Future<List<SyncTombstone>> loadPendingDeletions() async =>
-      List.from(_deletions);
-
-  @override
-  Future<void> savePendingDeletions(List<SyncTombstone> deletions) async {
-    _deletions.clear();
-    _deletions.addAll(deletions);
-  }
-
-  @override
   Future<void> clear() async {
     _memory.clear();
-    _deletions.clear();
   }
 }
 
@@ -72,35 +56,12 @@ class WidgetMemoriesTestFakePhotoFileManager extends PhotoFileManager {
   Future<bool> deletePhotoFile(String? path) async => true;
 }
 
-class WidgetMemoriesTestFakeSyncQueueStorage extends SyncQueueStorage {
-  WidgetMemoriesTestFakeSyncQueueStorage({super.customBaseDir});
-
-  final List<SyncOperation> _ops = [];
-
-  @override
-  Future<void> init() async {}
-
-  @override
-  Future<List<SyncOperation>> loadQueue() async => List.from(_ops);
-
-  @override
-  Future<void> saveQueue(List<SyncOperation> operations) async {
-    _ops.clear();
-    _ops.addAll(operations);
-  }
-
-  @override
-  Future<void> clear() async => _ops.clear();
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
   late WidgetMemoriesTestFakePhotoMetadataStorage metadataStorage;
   late WidgetMemoriesTestFakePhotoFileManager fileManager;
-  late WidgetMemoriesTestFakeSyncQueueStorage queueStorage;
-  late SyncQueue syncQueue;
   late PersistentDailyPhotoStore photoStore;
 
   setUp(() async {
@@ -111,16 +72,10 @@ void main() {
     fileManager = WidgetMemoriesTestFakePhotoFileManager(
       customBaseDir: tempDir,
     );
-    queueStorage = WidgetMemoriesTestFakeSyncQueueStorage(
-      customBaseDir: tempDir,
-    );
-    syncQueue = SyncQueue(storage: queueStorage);
-    await syncQueue.init();
 
     photoStore = PersistentDailyPhotoStore(
       metadataStorage: metadataStorage,
       fileManager: fileManager,
-      syncQueue: syncQueue,
     );
     await photoStore.init();
     PersistentDailyPhotoStore.setTestInstance(photoStore);
@@ -139,7 +94,6 @@ void main() {
   Future<PhotoEntry> addSamplePhoto({
     required DateKey dateKey,
     required String title,
-    String? caption,
     String? location,
     String timeFormatted = '2:45 PM',
     SyncStatus syncStatus = SyncStatus.localOnly,
@@ -148,7 +102,6 @@ void main() {
     final entry = PhotoEntry(
       date: dateKey.toDateTime(),
       title: title,
-      caption: caption,
       location: location,
       timeFormatted: timeFormatted,
       syncStatus: syncStatus,
@@ -465,7 +418,6 @@ void main() {
       await addSamplePhoto(
         dateKey: const DateKey(2025, 3, 28),
         title: 'Golden Sunset Hike',
-        caption: 'A wonderful evening hike watching the golden rays.',
         location: 'Bear Mountain Peak, NY',
       );
 
@@ -473,10 +425,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Golden Sunset Hike'), findsOneWidget);
-      expect(
-        find.text('A wonderful evening hike watching the golden rays.'),
-        findsOneWidget,
-      );
       expect(find.text('Bear Mountain Peak, NY'), findsOneWidget);
       expect(find.text('1 year ago'), findsOneWidget);
     });
@@ -565,38 +513,37 @@ void main() {
       await photoStore.updatePhotoMetadata(
         dateKey: const DateKey(2025, 3, 28),
         title: 'Replaced Memory Title',
-        caption: 'New Story Caption',
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Replaced Memory Title'), findsOneWidget);
-      expect(find.text('New Story Caption'), findsOneWidget);
       expect(find.text('Initial Memory Title'), findsNothing);
     });
 
-    testWidgets('15. Memory presentation uses existing sync-state mapping', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+    testWidgets(
+      '15. Memory presentation renders without obsolete cloud sync chips',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      final targetDate = DateTime(2026, 3, 28);
-      await addSamplePhoto(
-        dateKey: const DateKey(2025, 3, 28),
-        title: 'Synced Memory Photo',
-        syncStatus: SyncStatus.synced,
-      );
+        final targetDate = DateTime(2026, 3, 28);
+        await addSamplePhoto(
+          dateKey: const DateKey(2025, 3, 28),
+          title: 'Memory Photo',
+          syncStatus: SyncStatus.synced,
+        );
 
-      await tester.pumpWidget(createTestWidget(targetDate: targetDate));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(createTestWidget(targetDate: targetDate));
+        await tester.pumpAndSettle();
 
-      // Backed up chip renders
-      expect(find.text('Backed up'), findsOneWidget);
-    });
+        expect(find.text('Memory Photo'), findsOneWidget);
+        expect(find.text('Backed up'), findsNothing);
+      },
+    );
 
     testWidgets('16. No mock photos appear', (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);

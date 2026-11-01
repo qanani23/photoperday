@@ -13,12 +13,18 @@ class SectionHeader extends StatelessWidget {
     this.trailing,
     this.onPrevious,
     this.onNext,
+    this.previousTooltip = 'Previous month',
+    this.nextTooltip = 'Next month',
+    this.isHeader = true,
   });
 
   final String title;
   final Widget? trailing;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+  final String previousTooltip;
+  final String nextTooltip;
+  final bool isHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -34,12 +40,20 @@ class SectionHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Text(
-              title,
-              style: AppTypography.sectionTitle,
-              overflow: TextOverflow.ellipsis,
+            child: Semantics(
+              header: isHeader,
+              child: Text(
+                title,
+                style: AppTypography.sectionTitle,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
+          if (trailing != null) ...[
+            trailing!,
+            if (onPrevious != null || onNext != null)
+              const SizedBox(width: 8.0),
+          ],
           if (onPrevious != null || onNext != null)
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -47,21 +61,19 @@ class SectionHeader extends StatelessWidget {
                 if (onPrevious != null)
                   _buildChevronButton(
                     icon: Icons.chevron_left_rounded,
-                    tooltip: 'Previous month',
+                    tooltip: previousTooltip,
                     onTap: onPrevious!,
                   ),
                 if (onNext != null) ...[
                   const SizedBox(width: 4.0),
                   _buildChevronButton(
                     icon: Icons.chevron_right_rounded,
-                    tooltip: 'Next month',
+                    tooltip: nextTooltip,
                     onTap: onNext!,
                   ),
                 ],
               ],
-            )
-          else
-            ?trailing,
+            ),
         ],
       ),
     );
@@ -86,7 +98,7 @@ class SectionHeader extends StatelessWidget {
               child: Container(
                 width: 38.0,
                 height: 38.0,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppColors.surfaceSubtle,
                   shape: BoxShape.circle,
                 ),

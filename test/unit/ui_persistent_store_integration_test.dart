@@ -62,7 +62,6 @@ void main() {
         final realEntry = PhotoEntry(
           date: testDate,
           title: 'Real Captured Latte Art',
-          caption: 'My actual morning coffee captured on camera',
           location: 'Home Kitchen',
           gradientColors: const [Colors.brown, Colors.orange],
         );
@@ -71,24 +70,19 @@ void main() {
         // After saving: store has real photo, taking precedence over mock photo
         final resolvedAfter = store.getPhoto(testDate) ?? mockPhoto;
         expect(resolvedAfter.title, 'Real Captured Latte Art');
-        expect(
-          resolvedAfter.caption,
-          'My actual morning coffee captured on camera',
-        );
         expect(resolvedAfter.hasRealImage, isTrue);
         expect(resolvedAfter.isImageFileAvailable, isTrue);
       },
     );
 
     test(
-      '2. PhotoDetail editing: Editing title, caption, location persists and survives restart',
+      '2. PhotoDetail editing: Editing title, location persists and survives restart',
       () async {
         final testDate = DateTime(2026, 3, 15);
         final dummy = createDummySourcePhoto('today_original.jpg');
         final initialEntry = PhotoEntry(
           date: testDate,
           title: 'Initial Title',
-          caption: 'Initial Caption',
           location: 'Initial Location',
           gradientColors: const [Colors.amber, Colors.deepOrange],
         );
@@ -100,7 +94,6 @@ void main() {
         // Simulate PhotoDetailScreen editing
         final editedEntry = saved.copyWith(
           title: 'Edited Title in Detail Screen',
-          caption: 'Updated reflection from evening review',
           location: 'Griffith Observatory',
         );
         store.setPhoto(editedEntry);
@@ -113,7 +106,6 @@ void main() {
         final loadedMem = store.getPhoto(testDate);
         expect(loadedMem, isNotNull);
         expect(loadedMem!.title, 'Edited Title in Detail Screen');
-        expect(loadedMem.caption, 'Updated reflection from evening review');
         expect(loadedMem.location, 'Griffith Observatory');
 
         // Simulate App Restart (reinitializing store from disk metadata)
@@ -126,7 +118,6 @@ void main() {
         final loadedDisk = restoredStore.getPhoto(testDate);
         expect(loadedDisk, isNotNull);
         expect(loadedDisk!.title, 'Edited Title in Detail Screen');
-        expect(loadedDisk.caption, 'Updated reflection from evening review');
         expect(loadedDisk.location, 'Griffith Observatory');
         expect(loadedDisk.hasRealImage, isTrue);
         expect(loadedDisk.isImageFileAvailable, isTrue);
@@ -234,7 +225,7 @@ void main() {
     );
 
     test(
-      '6. Replacement preserves one-photo-per-day across UI operations',
+      '6. Multi-photo accumulation preserves both entries and files across UI operations',
       () async {
         final testDate = DateTime(2026, 3, 8);
         final dummy1 = createDummySourcePhoto('shot1.jpg');
@@ -251,7 +242,7 @@ void main() {
         );
         final firstPath = saved1.imagePath!;
 
-        // Replace with second photo
+        // Add second photo on same day
         final second = PhotoEntry(
           date: testDate,
           title: 'Second Replaced Shot',
@@ -263,14 +254,20 @@ void main() {
         );
         final secondPath = saved2.imagePath!;
 
-        expect(store.count, 1);
-        expect(store.getPhoto(testDate)!.title, 'Second Replaced Shot');
+        expect(store.count, 2);
+        expect(store.totalDays, 1);
         expect(firstPath, isNot(equals(secondPath)));
         expect(File(secondPath).existsSync(), isTrue);
+        expect(
+          File(firstPath).existsSync(),
+          isTrue,
+          reason: 'First photo file must be preserved',
+        );
 
-        // Old file cleaned up
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        expect(File(firstPath).existsSync(), isFalse);
+        final day = store.getDayByDate(testDate)!;
+        expect(day.photos.length, 2);
+        expect(day.photos[0].title, 'First Shot');
+        expect(day.photos[1].title, 'Second Replaced Shot');
       },
     );
   });

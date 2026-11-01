@@ -48,7 +48,7 @@ class AppHeaderAction extends StatelessWidget {
                   Container(
                     width: size,
                     height: size,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.surfaceSubtle,
                       shape: BoxShape.circle,
                     ),

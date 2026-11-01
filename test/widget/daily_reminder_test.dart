@@ -6,21 +6,17 @@ import 'package:photo_per_day/core/routing/app_router.dart';
 import 'package:photo_per_day/data/models/daily_reminder_settings.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_operation.dart';
-import 'package:photo_per_day/data/models/sync_run_result.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
-import 'package:photo_per_day/data/models/sync_tombstone.dart';
 import 'package:photo_per_day/data/services/daily_reminder_service.dart';
 import 'package:photo_per_day/data/services/daily_reminder_storage.dart';
 import 'package:photo_per_day/data/services/notification_client.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-import 'package:photo_per_day/data/services/sync_coordinator.dart';
-import 'package:photo_per_day/data/services/sync_queue.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
 import 'package:photo_per_day/screens/profile/profile_screen.dart';
 import 'package:photo_per_day/screens/today/today_screen.dart';
+import 'package:photo_per_day/widgets/scrolling_time_picker.dart';
+import 'package:photo_per_day/widgets/settings_tile.dart';
 
 class WidgetTestFakeNotificationClient implements NotificationClient {
   bool permissionGranted = true;
@@ -69,25 +65,10 @@ class WidgetTestFakeNotificationClient implements NotificationClient {
   Future<bool> didAppLaunchFromNotification() async => false;
 }
 
-class FakeSyncCoordinator extends SyncCoordinator {
-  FakeSyncCoordinator() : super(debounceDuration: Duration.zero);
-
-  @override
-  void scheduleAutoSync({
-    Duration? delay,
-    SyncTrigger trigger = SyncTrigger.photoChange,
-  }) {}
-
-  @override
-  Future<SyncRunResult> requestSync({required SyncTrigger trigger}) async =>
-      const SyncRunResult();
-}
-
 class WidgetReminderFakePhotoMetadataStorage extends PhotoMetadataStorage {
   WidgetReminderFakePhotoMetadataStorage({super.customBaseDir});
 
   final Map<DateKey, PhotoEntry> _memory = {};
-  final List<SyncTombstone> _deletions = [];
 
   @override
   Future<void> init() async {}
@@ -102,19 +83,8 @@ class WidgetReminderFakePhotoMetadataStorage extends PhotoMetadataStorage {
   }
 
   @override
-  Future<List<SyncTombstone>> loadPendingDeletions() async =>
-      List.from(_deletions);
-
-  @override
-  Future<void> savePendingDeletions(List<SyncTombstone> deletions) async {
-    _deletions.clear();
-    _deletions.addAll(deletions);
-  }
-
-  @override
   Future<void> clear() async {
     _memory.clear();
-    _deletions.clear();
   }
 }
 
@@ -135,27 +105,6 @@ class WidgetReminderFakePhotoFileManager extends PhotoFileManager {
 
   @override
   Future<bool> deletePhotoFile(String? path) async => true;
-}
-
-class WidgetReminderFakeSyncQueueStorage extends SyncQueueStorage {
-  WidgetReminderFakeSyncQueueStorage({super.customBaseDir});
-
-  final List<SyncOperation> _ops = [];
-
-  @override
-  Future<void> init() async {}
-
-  @override
-  Future<List<SyncOperation>> loadQueue() async => List.from(_ops);
-
-  @override
-  Future<void> saveQueue(List<SyncOperation> operations) async {
-    _ops.clear();
-    _ops.addAll(operations);
-  }
-
-  @override
-  Future<void> clear() async => _ops.clear();
 }
 
 class WidgetReminderFakeStorage extends DailyReminderStorage {
@@ -188,20 +137,13 @@ void main() {
       // In-memory PhotoStore
       final metaStorage = WidgetReminderFakePhotoMetadataStorage();
       final fileManager = WidgetReminderFakePhotoFileManager();
-      final queueStorage = WidgetReminderFakeSyncQueueStorage();
-      final syncQueue = SyncQueue(storage: queueStorage);
-      await syncQueue.init();
 
       photoStore = PersistentDailyPhotoStore(
         metadataStorage: metaStorage,
         fileManager: fileManager,
-        syncQueue: syncQueue,
       );
       await photoStore.init();
       PersistentDailyPhotoStore.setTestInstance(photoStore);
-
-      // Disable auto sync timers in widget tests
-      SyncCoordinator.setTestInstance(FakeSyncCoordinator());
 
       // In-memory ReminderService
       reminderStorage = WidgetReminderFakeStorage();
@@ -217,7 +159,6 @@ void main() {
     tearDown(() async {
       DailyReminderService.resetTestInstance();
       PersistentDailyPhotoStore.resetTestInstance();
-      SyncCoordinator.resetInstance();
       photoStore.dispose();
     });
 
@@ -244,13 +185,16 @@ void main() {
         findsOneWidget,
       );
 
-      final switchFinder = find.byType(Switch);
+      final switchFinder = find.descendant(
+        of: find.widgetWithText(SettingsTile, 'Daily Reminder'),
+        matching: find.byType(Switch),
+      );
       expect(switchFinder, findsOneWidget);
       final switchWidget = tester.widget<Switch>(switchFinder);
       expect(switchWidget.value, isFalse);
 
-      // Time badge should not be visible when disabled
-      expect(find.text('8:00 PM'), findsNothing);
+      // Reminder is confirmed disabled
+      expect(reminderService.isEnabled, isFalse);
     });
 
     testWidgets('2. Enabling Daily Reminder updates UI and shows time badge', (
@@ -266,7 +210,10 @@ void main() {
       await tester.pumpWidget(createProfileTestWidget());
       await tester.pumpAndSettle();
 
-      final switchFinder = find.byType(Switch);
+      final switchFinder = find.descendant(
+        of: find.widgetWithText(SettingsTile, 'Daily Reminder'),
+        matching: find.byType(Switch),
+      );
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
@@ -299,7 +246,12 @@ void main() {
       expect(find.text('Every day · 9:30 AM'), findsOneWidget);
       expect(find.text('9:30 AM'), findsOneWidget);
 
-      final switchWidget = tester.widget<Switch>(find.byType(Switch));
+      final switchWidget = tester.widget<Switch>(
+        find.descendant(
+          of: find.widgetWithText(SettingsTile, 'Daily Reminder'),
+          matching: find.byType(Switch),
+        ),
+      );
       expect(switchWidget.value, isTrue);
     });
 
@@ -318,7 +270,10 @@ void main() {
         await tester.pumpWidget(createProfileTestWidget());
         await tester.pumpAndSettle();
 
-        final switchFinder = find.byType(Switch);
+        final switchFinder = find.descendant(
+          of: find.widgetWithText(SettingsTile, 'Daily Reminder'),
+          matching: find.byType(Switch),
+        );
         await tester.tap(switchFinder);
         await tester.pumpAndSettle();
 
@@ -363,7 +318,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Time picker dialog should now be visible
-      expect(find.byType(TimePickerDialog), findsOneWidget);
+      expect(find.byType(ScrollingTimePickerDialog), findsOneWidget);
 
       // Tap OK/Cancel to close dialog
       final cancelButton = find.text('Cancel');
@@ -408,7 +363,6 @@ void main() {
         final todayEntry = PhotoEntry(
           date: todayKey.toDateTime(),
           title: 'Today Memory Invariant',
-          caption: 'Existing diary caption',
           syncStatus: SyncStatus.localOnly,
           gradientColors: const [Colors.amber, Colors.deepOrange],
         );

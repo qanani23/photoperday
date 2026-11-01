@@ -27,7 +27,7 @@ class WeekdayHeader extends StatelessWidget {
               child: Center(
                 child: Text(
                   weekdays[i],
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textMuted,

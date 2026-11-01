@@ -5,23 +5,25 @@ import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_shadows.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
+import 'package:photo_per_day/data/models/day_entry.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_presentation_model.dart';
 
 /// Reusable Visual Diary entry card for chronological photo journaling.
 ///
 /// Features the photo as the dominant visual centerpiece, an understated date &
 /// time header, subtle cloud backup status indicator, and graceful typography
-/// for optional title, caption, and location.
+/// for optional title, location, daily note, and multi-photo thumbnail strip.
 class VisualDiaryEntryCard extends StatelessWidget {
   const VisualDiaryEntryCard({
     super.key,
     required this.entry,
+    this.dayEntry,
     this.onTap,
     this.onBrowseTap,
   });
 
   final PhotoEntry entry;
+  final DayEntry? dayEntry;
   final ValueChanged<PhotoEntry>? onTap;
   final ValueChanged<PhotoEntry>? onBrowseTap;
 
@@ -57,8 +59,6 @@ class VisualDiaryEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasTitle = entry.title.trim().isNotEmpty;
-    final hasCaption =
-        entry.caption != null && entry.caption!.trim().isNotEmpty;
     final hasLocation =
         entry.location != null && entry.location!.trim().isNotEmpty;
     final hasTime = entry.timeFormatted.trim().isNotEmpty;
@@ -92,7 +92,7 @@ class VisualDiaryEntryCard extends StatelessWidget {
                   // Header Row: Date, Time & Sync Status
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.calendar_today_rounded,
                         size: 13.0,
                         color: AppColors.accent,
@@ -101,7 +101,7 @@ class VisualDiaryEntryCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           formattedDate,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
                             color: AppColors.textPrimary,
@@ -117,6 +117,27 @@ class VisualDiaryEntryCard extends StatelessWidget {
                           style: AppTypography.caption.copyWith(
                             fontSize: 11.0,
                             color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                      if (dayEntry != null && dayEntry!.photos.length > 1) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6.0,
+                            vertical: 2.0,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentLight,
+                            borderRadius: BorderRadius.circular(6.0),
+                          ),
+                          child: Text(
+                            'Photo ${entry.order + 1} of ${dayEntry!.photos.length}',
+                            style: TextStyle(
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.accent,
+                            ),
                           ),
                         ),
                       ],
@@ -137,7 +158,7 @@ class VisualDiaryEntryCard extends StatelessWidget {
                                   minWidth: 44.0,
                                   minHeight: 44.0,
                                 ),
-                                child: const Center(
+                                child: Center(
                                   child: Icon(
                                     Icons.view_carousel_rounded,
                                     size: 16.0,
@@ -178,12 +199,12 @@ class VisualDiaryEntryCard extends StatelessWidget {
                   ),
 
                   // Optional Diary Metadata (gracefully omitted if absent)
-                  if (hasTitle || hasCaption || hasLocation) ...[
+                  if (hasTitle || hasLocation) ...[
                     const SizedBox(height: AppSpacing.sm),
                     if (hasTitle)
                       Text(
                         entry.title.trim(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16.0,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
@@ -192,24 +213,11 @@ class VisualDiaryEntryCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    if (hasCaption) ...[
-                      const SizedBox(height: 4.0),
-                      Text(
-                        entry.caption!.trim(),
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          color: AppColors.textSecondary,
-                          height: 1.45,
-                        ),
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
                     if (hasLocation) ...[
                       const SizedBox(height: 6.0),
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.location_on_outlined,
                             size: 13.0,
                             color: AppColors.textMuted,
@@ -229,6 +237,121 @@ class VisualDiaryEntryCard extends StatelessWidget {
                         ],
                       ),
                     ],
+                  ],
+
+                  // Shared Daily Note if present
+                  if (dayEntry != null && dayEntry!.note.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(8.0),
+                        border: Border.all(color: AppColors.border, width: 0.6),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.notes_rounded,
+                            size: 13.0,
+                            color: AppColors.accent,
+                          ),
+                          const SizedBox(width: 6.0),
+                          Expanded(
+                            child: Text(
+                              dayEntry!.note,
+                              style: AppTypography.caption.copyWith(
+                                fontSize: 11.5,
+                                color: AppColors.textPrimary,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // Multi-photo thumbnail strip
+                  if (dayEntry != null && dayEntry!.photos.length > 1) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(
+                      height: 40.0,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: dayEntry!.photos.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(width: AppSpacing.xs),
+                        itemBuilder: (context, pIdx) {
+                          final p = dayEntry!.photos[pIdx];
+                          final isCurrent = p.effectiveId == entry.effectiveId;
+                          return GestureDetector(
+                            onTap: () => onTap?.call(p),
+                            child: Container(
+                              width: 40.0,
+                              height: 40.0,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(6.0),
+                                border: Border.all(
+                                  color: isCurrent
+                                      ? AppColors.accent
+                                      : AppColors.border,
+                                  width: isCurrent ? 2.0 : 0.8,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(5.0),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    (p.hasRealImage && p.isImageFileAvailable)
+                                        ? Image.file(
+                                            File(p.imagePath!),
+                                            cacheWidth: 100,
+                                            cacheHeight: 100,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    _buildFallbackPhoto(p),
+                                          )
+                                        : _buildFallbackPhoto(p),
+                                    Positioned(
+                                      bottom: 1.0,
+                                      right: 1.0,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 2.5,
+                                          vertical: 0.5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.65,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            2.0,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${pIdx + 1}',
+                                          style: const TextStyle(
+                                            fontSize: 7.0,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -259,33 +382,27 @@ class VisualDiaryEntryCard extends StatelessWidget {
   }
 
   Widget _buildSyncChip(PhotoEntry entry) {
-    final presentation = PhotoSyncPresentation.forEntry(entry);
-    return Semantics(
-      label: presentation.semanticLabel,
-      child: Tooltip(
-        message: presentation.detailLabel,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.5),
-          decoration: BoxDecoration(
-            color: presentation.color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(6.0),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(6.0),
+        border: Border.all(color: AppColors.border, width: 0.6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_rounded, size: 10.5, color: AppColors.statDaysGreen),
+          const SizedBox(width: 3.5),
+          Text(
+            'Local',
+            style: TextStyle(
+              fontSize: 10.0,
+              fontWeight: FontWeight.w600,
+              color: AppColors.statDaysGreen,
+            ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(presentation.icon, size: 10.5, color: presentation.color),
-              const SizedBox(width: 3.5),
-              Text(
-                presentation.label,
-                style: TextStyle(
-                  fontSize: 10.0,
-                  fontWeight: FontWeight.w600,
-                  color: presentation.color,
-                ),
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }

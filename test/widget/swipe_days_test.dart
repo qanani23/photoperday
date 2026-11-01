@@ -4,14 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_per_day/core/routing/app_router.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_operation.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
-import 'package:photo_per_day/data/models/sync_tombstone.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-import 'package:photo_per_day/data/services/sync_queue.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
 import 'package:photo_per_day/screens/diary/swipe_days_screen.dart';
 import 'package:photo_per_day/screens/photo_detail/photo_detail_screen.dart';
 
@@ -19,7 +15,6 @@ class WidgetSwipeTestFakePhotoMetadataStorage extends PhotoMetadataStorage {
   WidgetSwipeTestFakePhotoMetadataStorage({super.customBaseDir});
 
   final Map<DateKey, PhotoEntry> _memory = {};
-  final List<SyncTombstone> _deletions = [];
 
   @override
   Future<void> init() async {}
@@ -34,19 +29,8 @@ class WidgetSwipeTestFakePhotoMetadataStorage extends PhotoMetadataStorage {
   }
 
   @override
-  Future<List<SyncTombstone>> loadPendingDeletions() async =>
-      List.from(_deletions);
-
-  @override
-  Future<void> savePendingDeletions(List<SyncTombstone> deletions) async {
-    _deletions.clear();
-    _deletions.addAll(deletions);
-  }
-
-  @override
   Future<void> clear() async {
     _memory.clear();
-    _deletions.clear();
   }
 }
 
@@ -74,37 +58,12 @@ class WidgetSwipeTestFakePhotoFileManager extends PhotoFileManager {
   ) async => [];
 }
 
-class WidgetSwipeTestFakeSyncQueueStorage extends SyncQueueStorage {
-  WidgetSwipeTestFakeSyncQueueStorage({super.customBaseDir});
-
-  final List<SyncOperation> _ops = [];
-
-  @override
-  Future<void> init() async {}
-
-  @override
-  Future<List<SyncOperation>> loadQueue() async => List.from(_ops);
-
-  @override
-  Future<void> saveQueue(List<SyncOperation> operations) async {
-    _ops.clear();
-    _ops.addAll(operations);
-  }
-
-  @override
-  Future<void> clear() async {
-    _ops.clear();
-  }
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
   late WidgetSwipeTestFakePhotoFileManager fileManager;
   late WidgetSwipeTestFakePhotoMetadataStorage metadataStorage;
-  late WidgetSwipeTestFakeSyncQueueStorage syncQueueStorage;
-  late SyncQueue syncQueue;
   late PersistentDailyPhotoStore photoStore;
 
   setUp(() async {
@@ -113,16 +72,10 @@ void main() {
     metadataStorage = WidgetSwipeTestFakePhotoMetadataStorage(
       customBaseDir: tempDir,
     );
-    syncQueueStorage = WidgetSwipeTestFakeSyncQueueStorage(
-      customBaseDir: tempDir,
-    );
-    syncQueue = SyncQueue(storage: syncQueueStorage);
-    await syncQueue.init();
 
     photoStore = PersistentDailyPhotoStore(
       fileManager: fileManager,
       metadataStorage: metadataStorage,
-      syncQueue: syncQueue,
     );
     await photoStore.init();
     PersistentDailyPhotoStore.setTestInstance(photoStore);
@@ -217,7 +170,6 @@ void main() {
   Future<PhotoEntry> addSamplePhoto({
     required DateKey dateKey,
     String title = 'Sample Memory',
-    String? caption,
     String? location,
     SyncStatus syncStatus = SyncStatus.localOnly,
     String? driveFileId,
@@ -226,7 +178,6 @@ void main() {
     final entry = PhotoEntry(
       date: dateKey.toDateTime(hour: 14, minute: 30),
       title: title,
-      caption: caption,
       location: location,
       timeFormatted: '2:30 PM',
       imagePath: imageFile.path,
@@ -570,36 +521,30 @@ void main() {
       expect(find.text('First Date'), findsNothing);
     });
 
-    testWidgets(
-      '10. Metadata (title, caption, location, time) is displayed correctly',
-      (tester) async {
-        tester.view.physicalSize = const Size(1080, 2400);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('10. Metadata (title, location, time) is displayed correctly', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        await addSamplePhoto(
-          dateKey: const DateKey(2026, 3, 18),
-          title: 'Spring Blossom Walk',
-          caption: 'Cherry blossoms blooming in the park under a clear sky.',
-          location: 'Central Park Conservatory, NYC',
-        );
+      await addSamplePhoto(
+        dateKey: const DateKey(2026, 3, 18),
+        title: 'Spring Blossom Walk',
+        location: 'Central Park Conservatory, NYC',
+      );
 
-        await tester.pumpWidget(createTestWidget());
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
 
-        expect(find.text('Spring Blossom Walk'), findsOneWidget);
-        expect(
-          find.text('Cherry blossoms blooming in the park under a clear sky.'),
-          findsOneWidget,
-        );
-        expect(find.text('Central Park Conservatory, NYC'), findsOneWidget);
-        expect(find.text('Wednesday, March 18, 2026'), findsOneWidget);
-        expect(find.text('2:30 PM'), findsOneWidget);
-      },
-    );
+      expect(find.text('Spring Blossom Walk'), findsOneWidget);
+      expect(find.text('Central Park Conservatory, NYC'), findsOneWidget);
+      expect(find.text('Wednesday, March 18, 2026'), findsOneWidget);
+      expect(find.text('2:30 PM'), findsOneWidget);
+    });
 
     testWidgets(
       '11. Metadata changes in store are dynamically reflected in viewer',
@@ -614,7 +559,6 @@ void main() {
         await addSamplePhoto(
           dateKey: const DateKey(2026, 3, 10),
           title: 'Initial Title',
-          caption: 'Initial Caption',
         );
 
         await tester.pumpWidget(createTestWidget());
@@ -626,14 +570,12 @@ void main() {
         await photoStore.updatePhotoMetadata(
           dateKey: const DateKey(2026, 3, 10),
           title: 'Updated Title From Edit',
-          caption: 'Updated Caption Note',
           location: 'New Location',
         );
         await tester.pumpAndSettle();
 
         // Viewer reflects changes live
         expect(find.text('Updated Title From Edit'), findsOneWidget);
-        expect(find.text('Updated Caption Note'), findsOneWidget);
         expect(find.text('New Location'), findsOneWidget);
         expect(find.text('Initial Title'), findsNothing);
       },
@@ -659,23 +601,25 @@ void main() {
 
       expect(find.text('Original Shot'), findsOneWidget);
 
-      // Replace photo on same date
-      final replacementImage = createDummyImage('replacement_shot');
-      final replacement = PhotoEntry(
+      // Add second photo on same date
+      final secondImage = createDummyImage('second_shot');
+      final second = PhotoEntry(
         date: DateTime(2026, 3, 12, 17, 0),
-        title: 'Replaced Awesome Sunset',
+        title: 'Second Awesome Sunset',
         timeFormatted: '5:00 PM',
-        imagePath: replacementImage.path,
+        imagePath: secondImage.path,
         gradientColors: const [Colors.purple, Colors.pink],
       );
       await photoStore.savePhoto(
-        entry: replacement,
-        sourceTempPath: replacementImage.path,
+        entry: second,
+        sourceTempPath: secondImage.path,
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Replaced Awesome Sunset'), findsOneWidget);
-      expect(find.text('Original Shot'), findsNothing);
+      expect(find.text('Original Shot'), findsOneWidget);
+      final day = photoStore.getDay(const DateKey(2026, 3, 12))!;
+      expect(day.photos.length, 2);
+      expect(day.photos[1].title, 'Second Awesome Sunset');
     });
 
     testWidgets(
@@ -847,7 +791,7 @@ void main() {
       expect(find.text('3 of 4 recorded days'), findsOneWidget);
     });
 
-    testWidgets('18. Sync status uses existing presentation mapping', (
+    testWidgets('18. Recorded days navigate smoothly across entries', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(1080, 2400);
@@ -857,42 +801,39 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      // Local only photo
+      // Day 1
       await addSamplePhoto(
         dateKey: const DateKey(2026, 3, 1),
-        title: 'Local Only',
-        syncStatus: SyncStatus.localOnly,
+        title: 'First Memory',
       );
-      // Synced photo
+      // Day 2
       await addSamplePhoto(
         dateKey: const DateKey(2026, 3, 2),
-        title: 'Synced Cloud',
-        syncStatus: SyncStatus.synced,
-        driveFileId: 'drive_abc',
+        title: 'Second Memory',
       );
-      // Failed photo
+      // Day 3
       await addSamplePhoto(
         dateKey: const DateKey(2026, 3, 3),
-        title: 'Failed Cloud',
-        syncStatus: SyncStatus.failed,
+        title: 'Third Memory',
       );
 
-      // Start on page 1 (Local Only)
+      // Start on page 1
       await tester.pumpWidget(
         createTestWidget(initialDateKey: const DateKey(2026, 3, 1)),
       );
       await tester.pumpAndSettle();
-      expect(find.text('On this device'), findsOneWidget);
+      expect(find.text('First Memory'), findsOneWidget);
+      expect(find.text('Backed up'), findsNothing);
 
-      // Move to page 2 (Synced)
+      // Move to page 2
       await tester.tap(find.text('Newer'));
       await tester.pumpAndSettle();
-      expect(find.text('Backed up'), findsOneWidget);
+      expect(find.text('Second Memory'), findsOneWidget);
 
-      // Move to page 3 (Failed)
+      // Move to page 3
       await tester.tap(find.text('Newer'));
       await tester.pumpAndSettle();
-      expect(find.text('Backup failed'), findsOneWidget);
+      expect(find.text('Third Memory'), findsOneWidget);
     });
   });
 }

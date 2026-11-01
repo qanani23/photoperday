@@ -73,7 +73,6 @@ class SyntheticDiaryData {
         PhotoEntry(
           date: date,
           title: '$title $i',
-          caption: 'Synthetic memory entry #$i for performance testing.',
           location: location,
           timeFormatted:
               '${(i % 12) + 1}:${((i * 5) % 60).toString().padLeft(2, '0')} PM',

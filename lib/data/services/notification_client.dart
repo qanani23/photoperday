@@ -48,7 +48,7 @@ class FlutterLocalNotificationClient implements NotificationClient {
   bool _initialized = false;
 
   static const String channelId = 'daily_reminder_channel';
-  static const String channelName = 'Photo a Day Reminders';
+  static const String channelName = 'Daria Reminders';
   static const String channelDescription =
       "Daily reminder to capture today's photo";
 

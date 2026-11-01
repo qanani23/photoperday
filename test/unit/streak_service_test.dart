@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
+import 'package:photo_per_day/data/models/sync_status.dart';
 import 'package:photo_per_day/data/services/streak_service.dart';
 
 void main() {
@@ -45,7 +46,7 @@ void main() {
       expect(summary.totalRecordedDays, 3);
     });
 
-    test('4. Missing today -> current = 0', () {
+    test('4. Missing today -> current = 0 (when strict today required)', () {
       // Photos exist on March 17, 18, 19, but today (March 20) is missing
       final summary = StreakService.instance.calculateStreak(
         todayKey: today,
@@ -54,12 +55,32 @@ void main() {
           const DateKey(2026, 3, 18),
           const DateKey(2026, 3, 19),
         ],
+        allowYesterdayActive: false,
       );
 
       expect(summary.currentStreak, 0);
       expect(summary.longestStreak, 3);
       expect(summary.totalRecordedDays, 3);
     });
+
+    test(
+      '4b. Missing today but yesterday present -> preserves active streak until midnight (M44)',
+      () {
+        final summary = StreakService.instance.calculateStreak(
+          todayKey: today,
+          dateKeys: [
+            const DateKey(2026, 3, 17),
+            const DateKey(2026, 3, 18),
+            const DateKey(2026, 3, 19),
+          ],
+        );
+
+        expect(summary.currentStreak, 3);
+        expect(summary.longestStreak, 3);
+        expect(summary.totalRecordedDays, 3);
+        expect(summary.isActive, isTrue);
+      },
+    );
 
     test(
       '5. Historical consecutive sequence -> longest calculated correctly',
@@ -249,5 +270,144 @@ void main() {
       expect(summary.longestStreak, 2);
       expect(summary.totalRecordedDays, 2);
     });
+
+    test(
+      'M50: Photos with mixed syncStatus (localOnly, pending, failed, synced) all count',
+      () {
+        final entries = [
+          PhotoEntry(
+            date: DateTime(2026, 3, 17),
+            title: 'Day 17',
+            syncStatus: SyncStatus.localOnly,
+            gradientColors: const [],
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 18),
+            title: 'Day 18',
+            syncStatus: SyncStatus.pending,
+            gradientColors: const [],
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 19),
+            title: 'Day 19',
+            syncStatus: SyncStatus.failed,
+            syncError: 'Network error',
+            gradientColors: const [],
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 20),
+            title: 'Day 20',
+            syncStatus: SyncStatus.synced,
+            driveFileId: 'drive_123',
+            authorizedEmail: 'user@example.com',
+            gradientColors: const [],
+          ),
+        ];
+
+        final summary = StreakService.instance.calculateStreak(
+          todayKey: today,
+          entries: entries,
+        );
+
+        expect(summary.currentStreak, 4);
+        expect(summary.longestStreak, 4);
+        expect(summary.totalRecordedDays, 4);
+        expect(summary.isCurrentStreakActive, isTrue);
+      },
+    );
+
+    test(
+      'M50: Legacy records with missing or different cloud fields count',
+      () {
+        final entries = [
+          PhotoEntry(
+            date: DateTime(2026, 3, 19),
+            title: 'Yesterday',
+            gradientColors: const [],
+            driveFileId: null,
+            authorizedEmail: null,
+            syncStatus: SyncStatus.localOnly,
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 20),
+            title: 'Today',
+            gradientColors: const [],
+            driveFileId: 'old_cloud_id_999',
+            authorizedEmail: 'different_account@gmail.com',
+            syncStatus: SyncStatus.synced,
+          ),
+        ];
+
+        final summary = StreakService.instance.calculateStreak(
+          todayKey: today,
+          entries: entries,
+        );
+
+        expect(summary.currentStreak, 2);
+        expect(summary.longestStreak, 2);
+        expect(summary.totalRecordedDays, 2);
+      },
+    );
+
+    test('M50: Entries with missing local image files still count safely', () {
+      final entries = [
+        PhotoEntry(
+          date: DateTime(2026, 3, 19),
+          title: 'Missing File 1',
+          imagePath: '/nonexistent/path/photo_1.jpg',
+          gradientColors: const [],
+        ),
+        PhotoEntry(
+          date: DateTime(2026, 3, 20),
+          title: 'Missing File 2',
+          imagePath: '/nonexistent/path/photo_2.jpg',
+          gradientColors: const [],
+        ),
+      ];
+
+      expect(entries[0].isImageFileAvailable, isFalse);
+      expect(entries[1].isImageFileAvailable, isFalse);
+
+      final summary = StreakService.instance.calculateStreak(
+        todayKey: today,
+        entries: entries,
+      );
+
+      expect(summary.currentStreak, 2);
+      expect(summary.longestStreak, 2);
+      expect(summary.totalRecordedDays, 2);
+    });
+
+    test(
+      'M50: Multiple entries on same day are safely deduplicated to one per day',
+      () {
+        final entries = [
+          PhotoEntry(
+            date: DateTime(2026, 3, 19, 10, 0),
+            title: 'Morning',
+            gradientColors: const [],
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 19, 18, 0),
+            title: 'Evening',
+            gradientColors: const [],
+          ),
+          PhotoEntry(
+            date: DateTime(2026, 3, 20, 12, 0),
+            title: 'Today',
+            gradientColors: const [],
+          ),
+        ];
+
+        final summary = StreakService.instance.calculateStreak(
+          todayKey: today,
+          entries: entries,
+        );
+
+        expect(summary.currentStreak, 2);
+        expect(summary.longestStreak, 2);
+        expect(summary.totalRecordedDays, 2);
+      },
+    );
   });
 }

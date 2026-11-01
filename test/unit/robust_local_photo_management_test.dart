@@ -52,14 +52,13 @@ void main() {
     // 1. PERSISTENT METADATA EDITING
     // ==========================================
     group('1. Persistent Metadata Editing', () {
-      test('updates title, caption, location and survives restart', () async {
+      test('updates title, location and survives restart', () async {
         final date = DateTime(2026, 3, 10);
         final dummy = createDummySourcePhoto('orig.jpg');
         final initial = await store.savePhoto(
           entry: PhotoEntry(
             date: date,
             title: 'Initial Sunset',
-            caption: 'Warm colors over the hills',
             location: 'Griffith Park',
             gradientColors: const [Colors.orange, Colors.purple],
           ),
@@ -72,15 +71,10 @@ void main() {
         final updated = await store.updatePhotoMetadata(
           dateKey: initial.dateKey,
           title: 'Vibrant Sunset Panorama',
-          caption: 'Updated reflection from the summit observatory',
           location: 'Observatory Peak',
         );
 
         expect(updated.title, 'Vibrant Sunset Panorama');
-        expect(
-          updated.caption,
-          'Updated reflection from the summit observatory',
-        );
         expect(updated.location, 'Observatory Peak');
         // Image path must be completely untouched
         expect(updated.imagePath, equals(origImagePath));
@@ -95,10 +89,6 @@ void main() {
         final restored = restartedStore.getPhoto(date);
         expect(restored, isNotNull);
         expect(restored!.title, 'Vibrant Sunset Panorama');
-        expect(
-          restored.caption,
-          'Updated reflection from the summit observatory',
-        );
         expect(restored.location, 'Observatory Peak');
         expect(restored.imagePath, equals(origImagePath));
         expect(restartedStore.count, 1);
@@ -128,12 +118,12 @@ void main() {
           await store.updatePhotoMetadata(
             dateKey: DateKey.fromDateTime(date),
             title: 'Second Edit',
-            caption: 'Added caption',
+            location: 'Added location',
           );
 
           expect(store.count, 1);
           expect(store.getPhoto(date)!.title, 'Second Edit');
-          expect(store.getPhoto(date)!.caption, 'Added caption');
+          expect(store.getPhoto(date)!.location, 'Added location');
         },
       );
 
@@ -242,40 +232,54 @@ void main() {
         },
       );
 
-      test('successful replacement cleanly removes old photo file', () async {
-        final date = DateTime(2026, 3, 14);
-        final dummy1 = createDummySourcePhoto('shot1.jpg', content: 'photo-1');
-        final dummy2 = createDummySourcePhoto('shot2.jpg', content: 'photo-2');
+      test(
+        'saving a second photo to the same date preserves first photo and file (multi-photo accumulation)',
+        () async {
+          final date = DateTime(2026, 3, 14);
+          final dummy1 = createDummySourcePhoto(
+            'shot1.jpg',
+            content: 'photo-1',
+          );
+          final dummy2 = createDummySourcePhoto(
+            'shot2.jpg',
+            content: 'photo-2',
+          );
 
-        final first = await store.savePhoto(
-          entry: PhotoEntry(
-            date: date,
-            title: 'First Shot',
-            gradientColors: const [Colors.amber, Colors.orange],
-          ),
-          sourceTempPath: dummy1.path,
-        );
-        final firstPath = first.imagePath!;
-        expect(File(firstPath).existsSync(), isTrue);
+          final first = await store.savePhoto(
+            entry: PhotoEntry(
+              date: date,
+              title: 'First Shot',
+              gradientColors: const [Colors.amber, Colors.orange],
+            ),
+            sourceTempPath: dummy1.path,
+          );
+          final firstPath = first.imagePath!;
+          expect(File(firstPath).existsSync(), isTrue);
 
-        // Replace
-        final second = await store.replacePhotoAsync(
-          date,
-          PhotoEntry(
-            date: date,
-            title: 'Second Shot',
-            gradientColors: const [Colors.teal, Colors.indigo],
-          ),
-          sourceTempPath: dummy2.path,
-        );
-        final secondPath = second.imagePath!;
+          // Add second photo to same date
+          final second = await store.savePhoto(
+            entry: PhotoEntry(
+              date: date,
+              title: 'Second Shot',
+              gradientColors: const [Colors.teal, Colors.indigo],
+            ),
+            sourceTempPath: dummy2.path,
+          );
+          final secondPath = second.imagePath!;
 
-        expect(secondPath, isNot(equals(firstPath)));
-        expect(File(secondPath).existsSync(), isTrue);
-        expect(File(firstPath).existsSync(), isFalse);
-        expect(store.count, 1);
-        expect(store.getPhoto(date)!.title, 'Second Shot');
-      });
+          expect(secondPath, isNot(equals(firstPath)));
+          expect(File(secondPath).existsSync(), isTrue);
+          expect(
+            File(firstPath).existsSync(),
+            isTrue,
+            reason: 'First photo file must be preserved',
+          );
+          expect(store.count, 2);
+          expect(store.totalDays, 1);
+          final day = store.getDayByDate(date);
+          expect(day!.photos.length, 2);
+        },
+      );
     });
 
     // ==========================================

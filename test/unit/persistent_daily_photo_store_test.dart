@@ -180,70 +180,90 @@ void main() {
       expect(store.getPhoto(DateTime(2026, 9, 13))?.title, 'Day 13');
     });
 
-    // 7. Replacing a photo keeps exactly one entry for the date.
-    test('7. Replacing a photo keeps exactly one entry for the date', () async {
-      final dummyA = createDummySourcePhoto('photo_a.jpg');
-      final dummyB = createDummySourcePhoto('photo_b.jpg');
-      final date = DateTime(2026, 9, 12, 10, 0);
+    // 7. Adding multiple photos on same date accumulates in day entry.
+    test(
+      '7. Adding multiple photos on same date accumulates in day entry',
+      () async {
+        final dummyA = createDummySourcePhoto('photo_a.jpg');
+        final dummyB = createDummySourcePhoto('photo_b.jpg');
+        final date = DateTime(2026, 9, 12, 10, 0);
 
-      await store.savePhoto(
-        entry: PhotoEntry(
-          date: date,
-          title: 'Photo A',
-          gradientColors: const [Colors.grey, Colors.black],
-        ),
-        sourceTempPath: dummyA.path,
-      );
-      expect(store.totalPhotos, 1);
+        await store.savePhoto(
+          entry: PhotoEntry(
+            date: date,
+            title: 'Photo A',
+            gradientColors: const [Colors.grey, Colors.black],
+          ),
+          sourceTempPath: dummyA.path,
+        );
+        expect(store.totalDays, 1);
+        expect(store.totalPhotos, 1);
 
-      // Replace with Photo B on same date (different time)
-      await store.savePhoto(
-        entry: PhotoEntry(
-          date: DateTime(2026, 9, 12, 18, 0),
-          title: 'Photo B (Replacement)',
-          gradientColors: const [Colors.blue, Colors.cyan],
-        ),
-        sourceTempPath: dummyB.path,
-      );
+        // Add Photo B on same date (different time) — never replaces
+        await store.savePhoto(
+          entry: PhotoEntry(
+            date: DateTime(2026, 9, 12, 18, 0),
+            title: 'Photo B (Additional)',
+            gradientColors: const [Colors.blue, Colors.cyan],
+          ),
+          sourceTempPath: dummyB.path,
+        );
 
-      expect(store.totalPhotos, 1);
-      expect(store.getPhoto(date)?.title, 'Photo B (Replacement)');
-    });
+        const dateKey = DateKey(2026, 9, 12);
+        expect(store.totalDays, 1);
+        expect(store.totalPhotos, 2);
+        expect(store.getDay(dateKey)?.photoCount, 2);
+        expect(store.getDay(dateKey)?.photos[0].title, 'Photo A');
+        expect(store.getDay(dateKey)?.photos[1].title, 'Photo B (Additional)');
+      },
+    );
 
-    // 8. Replacing a photo updates the persisted image path.
-    test('8. Replacing a photo updates the persisted image path', () async {
-      final dummyA = createDummySourcePhoto('photo_a.jpg');
-      final dummyB = createDummySourcePhoto('photo_b.jpg');
-      final date = DateTime(2026, 9, 12);
+    // 8. Adding photos preserves independent image paths and stable IDs.
+    test(
+      '8. Adding photos preserves independent image paths and stable IDs',
+      () async {
+        final dummyA = createDummySourcePhoto('photo_a.jpg');
+        final dummyB = createDummySourcePhoto('photo_b.jpg');
+        final date = DateTime(2026, 9, 12);
 
-      final photoA = await store.savePhoto(
-        entry: PhotoEntry(
-          date: date,
-          title: 'Photo A',
-          gradientColors: const [Colors.red, Colors.orange],
-        ),
-        sourceTempPath: dummyA.path,
-      );
-      final pathA = photoA.imagePath;
+        final photoA = await store.savePhoto(
+          entry: PhotoEntry(
+            date: date,
+            title: 'Photo A',
+            gradientColors: const [Colors.red, Colors.orange],
+          ),
+          sourceTempPath: dummyA.path,
+        );
+        final pathA = photoA.imagePath;
 
-      final photoB = await store.savePhoto(
-        entry: PhotoEntry(
-          date: date,
-          title: 'Photo B',
-          gradientColors: const [Colors.green, Colors.lime],
-        ),
-        sourceTempPath: dummyB.path,
-      );
-      final pathB = photoB.imagePath;
+        final photoB = await store.savePhoto(
+          entry: PhotoEntry(
+            date: date,
+            title: 'Photo B',
+            gradientColors: const [Colors.green, Colors.lime],
+          ),
+          sourceTempPath: dummyB.path,
+        );
+        final pathB = photoB.imagePath;
 
-      expect(pathA, isNotNull);
-      expect(pathB, isNotNull);
-      expect(pathA, isNot(equals(pathB)));
-      expect(store.getPhoto(date)?.imagePath, pathB);
-    });
+        expect(pathA, isNotNull);
+        expect(pathB, isNotNull);
+        expect(pathA, isNot(equals(pathB)));
 
-    // 9. Old replaced image is cleaned up safely.
-    test('9. Old replaced image is cleaned up safely', () async {
+        final day = store.getDay(const DateKey(2026, 9, 12));
+        expect(day, isNotNull);
+        expect(day!.photos.length, 2);
+        expect(day.photos[0].imagePath, pathA);
+        expect(day.photos[1].imagePath, pathB);
+        expect(
+          day.photos[0].effectiveId,
+          isNot(equals(day.photos[1].effectiveId)),
+        );
+      },
+    );
+
+    // 9. Both photo files are preserved safely on disk.
+    test('9. Both photo files are preserved safely on disk', () async {
       final dummyA = createDummySourcePhoto('photo_a.jpg');
       final dummyB = createDummySourcePhoto('photo_b.jpg');
       final date = DateTime(2026, 9, 12);
@@ -269,9 +289,9 @@ void main() {
       );
       final fileB = File(photoB.imagePath!);
 
-      // Photo B must exist, Photo A must be deleted (no orphaned files)
+      // Both photos must exist safely on disk
+      expect(fileA.existsSync(), isTrue);
       expect(fileB.existsSync(), isTrue);
-      expect(fileA.existsSync(), isFalse);
     });
 
     // 10. Delete removes metadata and image file.

@@ -11,7 +11,6 @@ class MockPhotoService {
   static final PhotoEntry defaultTodayPhoto = PhotoEntry(
     date: DateTime(2026, 3, 15),
     title: 'Golden Afternoon Reflections',
-    caption: 'Sunlight dancing on the water during a quiet afternoon stroll.',
     location: 'Echo Park Lake',
     timeFormatted: '4:20 PM',
     category: 'Nature',
@@ -42,8 +41,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 1),
         title: 'Morning Roast',
-        caption:
-            'Quiet Sunday morning with freshly brewed single-origin espresso.',
         location: 'Downtown Cafe',
         timeFormatted: '8:30 AM',
         category: 'Coffee',
@@ -56,7 +53,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 2),
         title: 'Spring Meadow',
-        caption: 'First green blades of early spring catching the morning dew.',
         location: 'Botanical Gardens',
         timeFormatted: '9:15 AM',
         category: 'Nature',
@@ -69,7 +65,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 3),
         title: 'Park Run with Milo',
-        caption: 'Golden retriever in full sprint across the sunlit grass.',
         location: 'Riverside Dog Park',
         timeFormatted: '11:00 AM',
         category: 'Pets',
@@ -82,8 +77,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 4),
         title: 'Golden Hour Horizon',
-        caption:
-            'Deep amber sky melting into the distant silhouette of the hills.',
         location: 'Sunset Vista Point',
         timeFormatted: '6:10 PM',
         category: 'Sunset',
@@ -96,7 +89,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 5),
         title: 'Purple Twilight',
-        caption: 'Soft pastel dusk sky over the tranquil quiet neighborhood.',
         location: 'Home Balcony',
         timeFormatted: '6:45 PM',
         category: 'Sky',
@@ -109,7 +101,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 6),
         title: 'Friends & Sweet Tea',
-        caption: 'Spontaneous afternoon catchup and warm pastry.',
         location: 'Artisan Bakery',
         timeFormatted: '3:20 PM',
         category: 'Friends',
@@ -122,7 +113,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 7),
         title: 'Natural Light Portrait',
-        caption: 'Warm smile captured by the big studio window.',
         location: 'Creative Loft',
         timeFormatted: '2:00 PM',
         category: 'Portrait',
@@ -135,7 +125,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 8),
         title: 'Pine Ridge Hike',
-        caption: 'Overlook of the mountain pass shrouded in morning fog.',
         location: 'Pine Ridge Trail',
         timeFormatted: '10:45 AM',
         category: 'Outdoors',
@@ -148,7 +137,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 9),
         title: 'Redwood Sanctuary',
-        caption: 'Towering canopy filtering emerald beams of sunlight.',
         location: 'Muir Woods',
         timeFormatted: '1:15 PM',
         category: 'Nature',
@@ -161,7 +149,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 10),
         title: 'Farm-to-Table Brunch',
-        caption: 'Fresh sourdough toast, poached eggs, and wild berries.',
         location: 'The Rustic Table',
         timeFormatted: '11:30 AM',
         category: 'Food',
@@ -174,7 +161,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 11),
         title: 'Watercolor Afternoon',
-        caption: 'Vibrant brushstrokes and joyful creative messes.',
         location: 'Art Room',
         timeFormatted: '4:15 PM',
         category: 'Art',
@@ -187,7 +173,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 12),
         title: 'Rainy Day Reading',
-        caption: 'Warm knit blanket, steaming tea, and a chapter book.',
         location: 'Cozy Nook',
         timeFormatted: '5:00 PM',
         category: 'Lifestyle',
@@ -200,7 +185,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 13),
         title: 'Foggy Coast',
-        caption: 'Crashing Pacific swells under an overcast marine layer.',
         location: 'Bodega Bay',
         timeFormatted: '12:40 PM',
         category: 'Travel',
@@ -213,7 +197,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 14),
         title: 'Late Night Studio',
-        caption: 'Warm desk lamp illuminating sketches and handwritten notes.',
         location: 'Home Office',
         timeFormatted: '11:15 PM',
         category: 'Creative',
@@ -228,7 +211,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 16),
         title: 'Urban Monoliths',
-        caption: 'Glass facades reflecting geometric blue skies.',
         location: 'Financial Plaza',
         timeFormatted: '1:30 PM',
         category: 'Architecture',
@@ -241,7 +223,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 17),
         title: 'Reflections after Rain',
-        caption: 'City sidewalks glowing with amber puddle mirrors.',
         location: 'Market Street',
         timeFormatted: '7:40 PM',
         category: 'Street',
@@ -254,7 +235,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 18),
         title: 'Night Streetlamp Glow',
-        caption: 'Empty crosswalk bathed in cinematic warm lights.',
         location: 'Old Town Square',
         timeFormatted: '10:20 PM',
         category: 'Night',
@@ -267,7 +247,6 @@ class MockPhotoService {
       PhotoEntry(
         date: DateTime(2026, 3, 19),
         title: 'Subway Light Trail',
-        caption: 'Departing train blur rushing into the tunnel darkness.',
         location: 'Central Station',
         timeFormatted: '6:15 PM',
         category: 'Transit',
@@ -293,7 +272,6 @@ class MockPhotoService {
         PhotoEntry(
           date: DateTime(2026, 2, day),
           title: 'February Memory #$day',
-          caption: 'Winter moment preserved in the February archive.',
           location: 'City Archive',
           timeFormatted: '${(day % 12) + 1}:00 PM',
           category: 'Archive',
@@ -325,4 +303,7 @@ class MockPhotoService {
   bool hasPhotoByKey(DateKey key) {
     return _entries.containsKey(key);
   }
+
+  /// All mock entries as a list
+  List<PhotoEntry> get allEntries => _entries.values.toList();
 }

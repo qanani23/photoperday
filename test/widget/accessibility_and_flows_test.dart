@@ -4,33 +4,16 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_per_day/core/constants/app_constants.dart';
 import 'package:photo_per_day/core/routing/app_router.dart';
-import 'package:photo_per_day/data/models/auth_user.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
-import 'package:photo_per_day/data/models/drive_folder_reference.dart';
-import 'package:photo_per_day/data/models/drive_folder_result.dart';
-import 'package:photo_per_day/data/models/drive_photo_upload_response.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_run_result.dart';
-import 'package:photo_per_day/data/models/sync_operation_status.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
 import 'package:photo_per_day/data/services/daily_reminder_service.dart';
 import 'package:photo_per_day/data/services/daily_reminder_storage.dart';
 import 'package:photo_per_day/data/services/diary_export_service.dart';
-import 'package:photo_per_day/data/services/drive_api_adapter.dart';
-import 'package:photo_per_day/data/services/drive_auth_storage.dart';
-import 'package:photo_per_day/data/services/drive_folder_storage.dart';
-import 'package:photo_per_day/data/services/google_auth_service.dart';
-import 'package:photo_per_day/data/services/google_drive_auth_service.dart';
-import 'package:photo_per_day/data/services/google_drive_photo_upload_service.dart';
-import 'package:photo_per_day/data/services/google_drive_service.dart';
 import 'package:photo_per_day/data/services/notification_client.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-import 'package:photo_per_day/data/services/sync_coordinator.dart';
-import 'package:photo_per_day/data/services/sync_queue.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
-import 'package:photo_per_day/data/services/sync_worker.dart';
 import 'package:photo_per_day/screens/camera/camera_screen.dart';
 import 'package:photo_per_day/screens/diary/memories_screen.dart';
 import 'package:photo_per_day/screens/diary/swipe_days_screen.dart';
@@ -165,163 +148,6 @@ class M38FakeNotificationClient implements NotificationClient {
   Future<bool> didAppLaunchFromNotification() async => false;
 }
 
-class M38FakeGoogleSignInDelegate implements GoogleSignInDelegate {
-  AuthUser? mockUser;
-  bool driveScopeGranted = true;
-
-  @override
-  Future<AuthUser?> signInSilently() async => mockUser;
-
-  @override
-  Future<AuthUser?> signIn() async => mockUser;
-
-  @override
-  Future<void> signOut() async => mockUser = null;
-
-  @override
-  Future<void> disconnect() async => mockUser = null;
-
-  @override
-  Future<bool> canAccessDriveScope() async => true;
-
-  @override
-  Future<bool> requestDriveScope() async => driveScopeGranted;
-
-  @override
-  Future<Map<String, String>> getAuthHeaders() async => {
-    'Authorization': 'Bearer fake_token',
-    'X-Goog-AuthUser': '0',
-  };
-}
-
-class M38FakeDriveAuthDelegate implements GoogleDriveAuthDelegate {
-  bool driveScopeGranted = true;
-
-  @override
-  Future<bool> canAccessDriveScope() async => true;
-
-  @override
-  Future<bool> requestDriveScope() async => driveScopeGranted;
-
-  @override
-  Future<Map<String, String>> getAuthHeaders() async => {
-    'Authorization': 'Bearer fake_token',
-    'X-Goog-AuthUser': '0',
-  };
-}
-
-class M38FakeDriveApiAdapter implements DriveApiAdapter {
-  bool failUpload = false;
-  bool failDelete = false;
-  final Map<String, String> uploadedFiles = {};
-  final List<String> deletedFiles = <String>[];
-  DriveFolderReference? existingFolder;
-
-  @override
-  Future<DriveFolderReference?> findFolder({
-    required String folderName,
-    required Map<String, String> authHeaders,
-    String? accountEmail,
-  }) async {
-    return existingFolder ??
-        DriveFolderReference(
-          folderId: 'app_folder',
-          folderName: folderName,
-          authorizedEmail: accountEmail,
-          resolvedAt: DateTime.now().toUtc(),
-        );
-  }
-
-  @override
-  Future<DriveFolderReference> createFolder({
-    required String folderName,
-    required Map<String, String> authHeaders,
-    String? accountEmail,
-  }) async {
-    return DriveFolderReference(
-      folderId: 'app_folder',
-      folderName: folderName,
-      authorizedEmail: accountEmail,
-      resolvedAt: DateTime.now().toUtc(),
-    );
-  }
-
-  @override
-  Future<DrivePhotoUploadResponse> uploadPhotoFile({
-    required File file,
-    required String filename,
-    required String mimeType,
-    required String parentFolderId,
-    required Map<String, String> authHeaders,
-    DriveUploadProgress? onProgress,
-  }) async {
-    if (failUpload) {
-      throw const DriveApiException(
-        'Simulated Drive upload error',
-        errorType: DriveFolderErrorType.apiError,
-      );
-    }
-    final driveId = 'drive_id_${uploadedFiles.length + 1}';
-    uploadedFiles[filename] = driveId;
-    return DrivePhotoUploadResponse(
-      fileId: driveId,
-      revision: 'rev_1',
-      filename: filename,
-    );
-  }
-
-  @override
-  Future<DrivePhotoUploadResponse> updatePhotoFile({
-    required String fileId,
-    required Map<String, String> authHeaders,
-    File? file,
-    String? filename,
-    String? mimeType,
-    String? description,
-    DriveUploadProgress? onProgress,
-  }) async {
-    if (failUpload) {
-      throw const DriveApiException(
-        'Simulated Drive update error',
-        errorType: DriveFolderErrorType.apiError,
-      );
-    }
-    return DrivePhotoUploadResponse(
-      fileId: fileId,
-      revision: 'rev_2',
-      filename: filename ?? 'photo.jpg',
-    );
-  }
-
-  @override
-  Future<void> trashPhotoFile({
-    required String fileId,
-    required Map<String, String> authHeaders,
-  }) async {
-    if (failDelete) {
-      throw const DriveApiException(
-        'Simulated Drive trash error',
-        errorType: DriveFolderErrorType.apiError,
-      );
-    }
-    deletedFiles.add(fileId);
-  }
-}
-
-class M38FakeSyncCoordinator extends SyncCoordinator {
-  M38FakeSyncCoordinator() : super(debounceDuration: Duration.zero);
-
-  @override
-  void scheduleAutoSync({
-    Duration? delay,
-    SyncTrigger trigger = SyncTrigger.photoChange,
-  }) {}
-
-  @override
-  Future<SyncRunResult> requestSync({required SyncTrigger trigger}) async =>
-      const SyncRunResult();
-}
-
 class M38FakeCameraService extends CameraService {
   @override
   CameraStatus get status => CameraStatus.permissionDenied;
@@ -337,7 +163,7 @@ class M38FakeCameraService extends CameraService {
 }
 
 // =============================================================================
-// Milestone 38 Test Suite
+// Milestone 38 Test Suite (Local-Only Refined)
 // =============================================================================
 
 void main() {
@@ -346,37 +172,25 @@ void main() {
   late Directory tempDir;
   late PhotoFileManager fileManager;
   late PhotoMetadataStorage metadataStorage;
-  late SyncQueueStorage queueStorage;
-  late SyncQueue syncQueue;
   late PersistentDailyPhotoStore store;
   late M38FakeNotificationClient notificationClient;
-  late M38FakeGoogleSignInDelegate signInDelegate;
-  late M38FakeDriveAuthDelegate driveAuthDelegate;
-  late M38FakeDriveApiAdapter driveApiAdapter;
-  late GoogleDriveService driveService;
-  late GoogleDrivePhotoUploadService uploadService;
-  late SyncWorker syncWorker;
 
   const testColors = [Color(0xFF6B4EE6), Color(0xFF9B51E0)];
 
   PhotoEntry createSampleEntry({
     required DateTime date,
     required String title,
-    String? caption,
     String? location,
     String? imagePath,
     SyncStatus syncStatus = SyncStatus.localOnly,
-    String? authorizedEmail,
   }) {
     return PhotoEntry(
       date: date,
       title: title,
-      caption: caption,
       location: location,
       imagePath: imagePath,
       syncStatus: syncStatus,
       gradientColors: testColors,
-      authorizedEmail: authorizedEmail,
     );
   }
 
@@ -390,19 +204,13 @@ void main() {
     tempDir = Directory.systemTemp.createTempSync('m38_accessibility_test_');
     fileManager = PhotoFileManager(customBaseDir: tempDir);
     metadataStorage = PhotoMetadataStorage(customBaseDir: tempDir);
-    queueStorage = SyncQueueStorage(customBaseDir: tempDir);
 
     await fileManager.init();
     await metadataStorage.init();
-    await queueStorage.init();
-
-    syncQueue = SyncQueue(storage: queueStorage);
-    await syncQueue.init();
 
     store = PersistentDailyPhotoStore(
       fileManager: fileManager,
       metadataStorage: metadataStorage,
-      syncQueue: syncQueue,
     );
     await store.init();
 
@@ -415,53 +223,9 @@ void main() {
     );
     await reminderService.init();
     DailyReminderService.setTestInstance(reminderService);
-
-    signInDelegate = M38FakeGoogleSignInDelegate();
-    GoogleAuthService.instance.delegate = signInDelegate;
-
-    driveAuthDelegate = M38FakeDriveAuthDelegate();
-    GoogleDriveAuthService.instance.delegate = driveAuthDelegate;
-    GoogleDriveAuthService.instance.storage = DriveAuthStorage(
-      customBaseDir: tempDir.path,
-    );
-
-    driveApiAdapter = M38FakeDriveApiAdapter();
-    final folderStorage = DriveFolderStorage(customBaseDir: tempDir.path);
-    driveService = GoogleDriveService(
-      adapter: driveApiAdapter,
-      storage: folderStorage,
-    );
-    await driveService.init();
-    GoogleDriveService.setTestInstance(driveService);
-
-    uploadService = GoogleDrivePhotoUploadService(
-      adapter: driveApiAdapter,
-      authService: GoogleAuthService.instance,
-      driveAuthService: GoogleDriveAuthService.instance,
-      driveService: driveService,
-      photoStore: store,
-    );
-    GoogleDrivePhotoUploadService.setTestInstance(uploadService);
-
-    syncWorker = SyncWorker(
-      syncQueue: syncQueue,
-      photoStore: store,
-      authService: GoogleAuthService.instance,
-      driveAuthService: GoogleDriveAuthService.instance,
-      driveService: driveService,
-      uploadService: uploadService,
-      driveAdapter: driveApiAdapter,
-    );
-    SyncWorker.setTestInstance(syncWorker);
-
-    SyncCoordinator.setTestInstance(M38FakeSyncCoordinator());
   });
 
   tearDown(() async {
-    SyncCoordinator.resetInstance();
-    SyncWorker.resetInstance();
-    GoogleDrivePhotoUploadService.resetInstance();
-    GoogleDriveService.resetInstance();
     PersistentDailyPhotoStore.resetTestInstance();
     DailyReminderService.resetTestInstance();
 
@@ -533,7 +297,6 @@ void main() {
               day: 15,
               isToday: true,
               style: CalendarCellStyle.photo,
-              syncStatus: SyncStatus.synced,
               onTap: () {},
             ),
           ),
@@ -543,12 +306,10 @@ void main() {
         final cellFinder = find.byType(CalendarCell);
         expect(cellFinder, findsOneWidget);
 
-        // Verify semantics communicate date, today state, photo presence, and sync status non-visually
         final semantics = tester.getSemantics(cellFinder);
         expect(semantics.label, contains('Day 15'));
         expect(semantics.label, contains('Today'));
         expect(semantics.label, contains('Photo memory captured'));
-        expect(semantics.label, contains('Backed up'));
       },
     );
 
@@ -587,10 +348,8 @@ void main() {
         final entry = createSampleEntry(
           date: DateTime(2026, 3, 10),
           title: 'Sunset at Park',
-          caption: 'Golden light filtering through pines',
           location: 'City Garden',
           imagePath: dummy.path,
-          syncStatus: SyncStatus.synced,
         );
 
         await tester.pumpWidget(
@@ -642,7 +401,6 @@ void main() {
     testWidgets(
       'ProfileScreen reminder switch and time changer are fully accessible',
       (tester) async {
-        // Enable reminder so both time selector and switch are active
         notificationClient.permissionGranted = true;
         await DailyReminderService.instance.setEnabled(true);
 
@@ -682,7 +440,9 @@ void main() {
           await store.savePhoto(entry: entry, sourceTempPath: dummy.path);
         });
 
-        await tester.pumpWidget(wrapForAccessibilityTest(const TodayScreen()));
+        await tester.pumpWidget(
+          wrapForAccessibilityTest(TodayScreen(todayDate: date)),
+        );
         await settle(tester);
 
         expect(
@@ -718,41 +478,39 @@ void main() {
         );
         await settle(tester);
 
-        // Confirm no RenderFlex overflows
         expect(tester.takeException(), isNull);
         expect(find.byType(HomeScreen), findsOneWidget);
       },
     );
 
-    testWidgets('TodayScreen renders with no overflow under 1.8x text scaling', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+    testWidgets(
+      'TodayScreen renders with no overflow under 1.8x text scaling',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      final dummy = createTestPhoto('scale_today');
-      final entry = createSampleEntry(
-        date: DateTime(2026, 3, 15),
-        title: 'Large Text Scale Test On Today Screen',
-        caption:
-            'Detailed story text verifying multiline flexibility without clip',
-        imagePath: dummy.path,
-      );
-      await tester.runAsync(() async {
-        await store.savePhoto(entry: entry, sourceTempPath: dummy.path);
-      });
+        final dummy = createTestPhoto('scale_today');
+        final entry = createSampleEntry(
+          date: DateTime(2026, 3, 15),
+          title: 'Large Text Scale Test On Today Screen',
+          imagePath: dummy.path,
+        );
+        await tester.runAsync(() async {
+          await store.savePhoto(entry: entry, sourceTempPath: dummy.path);
+        });
 
-      await tester.pumpWidget(
-        wrapForAccessibilityTest(const TodayScreen(), textScaleFactor: 1.8),
-      );
-      await settle(tester);
+        await tester.pumpWidget(
+          wrapForAccessibilityTest(const TodayScreen(), textScaleFactor: 1.8),
+        );
+        await settle(tester);
 
-      expect(tester.takeException(), isNull);
-    });
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('PhotoDetailScreen renders cleanly under 1.8x text scaling', (
       tester,
@@ -768,10 +526,8 @@ void main() {
       final entry = createSampleEntry(
         date: DateTime(2026, 3, 10),
         title: 'Accessibility Scaled Title',
-        caption: 'Long narrative text with increased font size',
         location: 'Central Plaza Park',
         imagePath: dummy.path,
-        syncStatus: SyncStatus.synced,
       );
 
       await tester.pumpWidget(
@@ -801,7 +557,6 @@ void main() {
         final entry = createSampleEntry(
           date: DateTime(2026, 3, 10),
           title: 'Diary Card Scaled Text',
-          caption: 'Checking text container wrapping behavior',
           imagePath: dummy.path,
         );
         await tester.runAsync(() async {
@@ -837,7 +592,7 @@ void main() {
         await settle(tester);
 
         expect(tester.takeException(), isNull);
-        expect(find.text('Profile & Settings'), findsOneWidget);
+        expect(find.text('Profile'), findsOneWidget);
       },
     );
 
@@ -886,7 +641,6 @@ void main() {
         final initialEntry = createSampleEntry(
           date: date,
           title: 'Lifecycle Initial',
-          caption: 'Initial caption',
           location: 'Initial location',
         );
         final saved = await store.savePhoto(
@@ -902,12 +656,10 @@ void main() {
         final updated = await store.updatePhotoMetadata(
           dateKey: saved.dateKey,
           title: 'Updated Title',
-          caption: 'Updated caption',
           location: 'Updated location',
         );
         expect(updated.title, 'Updated Title');
         expect(store.getPhoto(date)?.title, 'Updated Title');
-        expect(store.getPhoto(date)?.caption, 'Updated caption');
 
         // 3. Delete
         await store.removePhotoAsync(date);
@@ -917,7 +669,7 @@ void main() {
     );
 
     test(
-      'B. One-photo-per-day rule: create -> replace same day -> verify exactly one entry remains',
+      'B. Multi-photo rule: create -> add second photo same day -> verify both entries accumulate without replacement',
       () async {
         final date = DateTime(2026, 3, 14);
         final dummy1 = createTestPhoto('first_shot');
@@ -928,144 +680,83 @@ void main() {
         await store.savePhoto(entry: firstEntry, sourceTempPath: dummy1.path);
 
         expect(store.totalPhotos, 1);
+        expect(store.totalDays, 1);
         expect(store.getPhoto(date)?.title, 'First Shot');
 
         // Second capture on the exact same calendar day
-        final replacementEntry = createSampleEntry(
-          date: date,
-          title: 'Replacement Shot',
-        );
-        await store.savePhoto(
-          entry: replacementEntry,
-          sourceTempPath: dummy2.path,
-        );
+        final secondEntry = createSampleEntry(date: date, title: 'Second Shot');
+        await store.savePhoto(entry: secondEntry, sourceTempPath: dummy2.path);
 
-        // Verify domain rule: exactly 1 photo for this date, replacing the previous
-        expect(store.totalPhotos, 1);
-        expect(store.getPhoto(date)?.title, 'Replacement Shot');
-        expect(store.chronologicalEntries.length, 1);
+        // Verify M58 rule: both photos accumulate in the same DayEntry without replacing
+        expect(store.totalPhotos, 2);
+        expect(store.totalDays, 1);
+        expect(store.chronologicalEntries.length, 2);
+        final day = store.getDayByDate(date)!;
+        expect(day.photos.length, 2);
+        expect(day.photos[0].title, 'First Shot');
+        expect(day.photos[1].title, 'Second Shot');
       },
     );
 
     test(
-      'C. Sync lifecycle: local -> pending -> synced and local -> pending -> failed -> retry',
+      'C. Local persistence: verify photo entry persists to disk and metadata updates reliably',
       () async {
         final date = DateTime(2026, 3, 15);
-        final dummy = createTestPhoto('sync_flow');
-        signInDelegate.mockUser = const AuthUser(
-          id: 'user_123',
-          email: 'photofan@example.com',
-          displayName: 'Photo Fan',
-        );
-        await GoogleAuthService.instance.signIn();
-        await GoogleDriveAuthService.instance.authorizeDrive();
-        driveApiAdapter.existingFolder = DriveFolderReference(
-          folderId: 'app_folder',
-          folderName: 'Photo a Day',
-          authorizedEmail: 'photofan@example.com',
-          resolvedAt: DateTime.now().toUtc(),
-        );
-        await GoogleDriveService.instance.setupFolder();
+        final dummy = createTestPhoto('local_persist_flow');
 
-        // 1. Local save creates pending sync queue entry
+        // Save photo locally
         final entry = createSampleEntry(
           date: date,
-          title: 'Sync Lifecycle',
-          syncStatus: SyncStatus.pending,
+          title: 'Local Persistence Flow',
         );
         await store.savePhoto(entry: entry, sourceTempPath: dummy.path);
 
-        expect(store.getPhoto(date)?.syncStatus, SyncStatus.pending);
-        expect(syncQueue.count, 1);
+        expect(store.getPhoto(date)?.title, 'Local Persistence Flow');
+        expect(store.getPhoto(date)?.syncStatus, SyncStatus.localOnly);
 
-        // 2. Process sync worker successfully
-        driveApiAdapter.failUpload = false;
-        final workerResult = await syncWorker.syncNow();
-        expect(workerResult.succeededCount, 1);
-        expect(store.getPhoto(date)?.syncStatus, SyncStatus.synced);
-
-        // 3. Update photo metadata creates new sync operation
+        // Update photo metadata locally
         await store.updatePhotoMetadata(
           dateKey: DateKey.fromDateTime(date),
-          title: 'Sync Updated',
+          title: 'Local Metadata Updated',
+          location: 'Home Studio',
         );
-        expect(store.getPhoto(date)?.syncStatus, SyncStatus.pending);
 
-        // 4. Simulated failure
-        driveApiAdapter.failUpload = true;
-        final failedResult = await syncWorker.syncNow();
-        expect(failedResult.failedCount, 1);
-        expect(store.getPhoto(date)?.syncStatus, SyncStatus.failed);
+        final updated = store.getPhoto(date);
+        expect(updated?.title, 'Local Metadata Updated');
+        expect(updated?.location, 'Home Studio');
 
-        // 5. Retry successfully (simulate elapsed retry timer)
-        driveApiAdapter.failUpload = false;
-        final op = syncQueue.getOperationForDate(DateKey.fromDateTime(date))!;
-        await syncQueue.markFailed(
-          op.id,
-          error: '',
-          nextAttemptAt: DateTime.now().toUtc().subtract(
-            const Duration(seconds: 1),
-          ),
+        // Re-read directly from disk metadata storage
+        final allStored = await metadataStorage.loadAll();
+        expect(
+          allStored[DateKey.fromDateTime(date)]?.title,
+          'Local Metadata Updated',
         );
-        final retryResult = await syncWorker.syncNow();
-        expect(retryResult.succeededCount, 1);
-        expect(store.getPhoto(date)?.syncStatus, SyncStatus.synced);
       },
     );
 
     test(
-      'D. Account safety: Account A queued operation must not execute under Account B',
+      'D. DateKey independent storage: photos on different dates are isolated',
       () async {
-        final date = DateTime(2026, 3, 16);
-        final dummy = createTestPhoto('account_safety');
+        final date1 = DateTime(2026, 3, 16);
+        final date2 = DateTime(2026, 3, 17);
+        final dummy1 = createTestPhoto('photo_day1');
+        final dummy2 = createTestPhoto('photo_day2');
 
-        // Sign in as Account A
-        signInDelegate.mockUser = const AuthUser(
-          id: 'account_a',
-          email: 'a@example.com',
-        );
-        await GoogleAuthService.instance.signIn();
-        await GoogleDriveAuthService.instance.authorizeDrive();
-        driveApiAdapter.existingFolder = DriveFolderReference(
-          folderId: 'app_folder_a',
-          folderName: 'Photo a Day',
-          authorizedEmail: 'a@example.com',
-          resolvedAt: DateTime.now().toUtc(),
-        );
-        await GoogleDriveService.instance.setupFolder();
+        final entry1 = createSampleEntry(date: date1, title: 'Day 1 Photo');
+        final entry2 = createSampleEntry(date: date2, title: 'Day 2 Photo');
 
-        final entry = createSampleEntry(
-          date: date,
-          title: 'Account A Photo',
-          syncStatus: SyncStatus.pending,
-          authorizedEmail: 'a@example.com',
-        );
-        await store.savePhoto(entry: entry, sourceTempPath: dummy.path);
-        expect(syncQueue.count, 1);
+        await store.savePhoto(entry: entry1, sourceTempPath: dummy1.path);
+        await store.savePhoto(entry: entry2, sourceTempPath: dummy2.path);
 
-        // Switch to Account B
-        signInDelegate.mockUser = const AuthUser(
-          id: 'account_b',
-          email: 'b@example.com',
-        );
-        await GoogleAuthService.instance.signIn();
-        await GoogleDriveAuthService.instance.authorizeDrive();
-        driveApiAdapter.existingFolder = DriveFolderReference(
-          folderId: 'app_folder_b',
-          folderName: 'Photo a Day',
-          authorizedEmail: 'b@example.com',
-          resolvedAt: DateTime.now().toUtc(),
-        );
-        await GoogleDriveService.instance.setupFolder();
+        expect(store.totalPhotos, 2);
+        expect(store.getPhoto(date1)?.title, 'Day 1 Photo');
+        expect(store.getPhoto(date2)?.title, 'Day 2 Photo');
 
-        // SyncWorker must reject Account A queued item under Account B
-        final workerResult = await syncWorker.syncNow();
-        expect(workerResult.failedCount, 1);
-        final queuedOp = syncQueue.operations.first;
-        expect(queuedOp.status, SyncOperationStatus.failed);
-        expect(queuedOp.lastError, contains('b@example.com'));
-        // Local photo remains safely untouched
-        expect(store.getPhoto(date)?.syncStatus, SyncStatus.pending);
+        // Deleting day 1 does not affect day 2
+        await store.removePhotoAsync(date1);
+        expect(store.totalPhotos, 1);
+        expect(store.getPhoto(date1), isNull);
+        expect(store.getPhoto(date2)?.title, 'Day 2 Photo');
       },
     );
 
@@ -1078,7 +769,6 @@ void main() {
         final entry = createSampleEntry(
           date: date,
           title: 'Exported Memory',
-          caption: 'Caption for export verification',
           imagePath: dummy.path,
         );
         await store.savePhoto(entry: entry, sourceTempPath: dummy.path);
@@ -1101,7 +791,7 @@ void main() {
     );
 
     test(
-      'F. Delete flows: local delete clears store, cloud delete interacts with Drive adapter',
+      'F. Delete flows: local delete clears store and removes photo entries',
       () async {
         final date = DateTime(2026, 3, 18);
         final dummy = createTestPhoto('delete_test');
@@ -1117,25 +807,7 @@ void main() {
         expect(store.totalPhotos, 1);
         await store.deleteLocalDiary();
         expect(store.totalPhotos, 0);
-
-        // Cloud delete via DriveService
-        signInDelegate.mockUser = const AuthUser(
-          id: 'u1',
-          email: 'u1@example.com',
-        );
-        await GoogleAuthService.instance.signIn();
-        await GoogleDriveAuthService.instance.authorizeDrive();
-        driveApiAdapter.existingFolder = DriveFolderReference(
-          folderId: 'app_folder',
-          folderName: 'Photo a Day',
-          authorizedEmail: 'u1@example.com',
-          resolvedAt: DateTime.now().toUtc(),
-        );
-        await GoogleDriveService.instance.setupFolder();
-
-        final cloudDeleteResult = await GoogleDriveService.instance
-            .deleteDriveBackup(photoStore: store);
-        expect(cloudDeleteResult, isA<DriveDeleteSuccess>());
+        expect(store.hasPhoto(date), isFalse);
       },
     );
 
@@ -1205,11 +877,21 @@ void main() {
 
         // We are in VisualDiaryScreen
         expect(find.text('Diary'), findsOneWidget);
-        expect(find.text('Navigation Test Photo'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(VisualDiaryScreen),
+            matching: find.text('Navigation Test Photo'),
+          ),
+          findsOneWidget,
+        );
 
         // Open Browse Days from diary
-        expect(find.byTooltip('Browse Days'), findsAtLeastNWidgets(1));
-        await tester.tap(find.byTooltip('Browse Days').first);
+        final diaryBrowseBtn = find.descendant(
+          of: find.byType(VisualDiaryScreen),
+          matching: find.byTooltip('Browse Days'),
+        );
+        expect(diaryBrowseBtn, findsAtLeastNWidgets(1));
+        await tester.tap(diaryBrowseBtn.first);
         await settle(tester);
 
         // We are in SwipeDaysScreen
@@ -1249,14 +931,14 @@ void main() {
     );
 
     testWidgets(
-      'Pending sync state badge is accessible and distinguishable without color alone',
+      'Photo detail metadata displays title and location with clear text rendering',
       (tester) async {
-        final dummy = createTestPhoto('pending_sync');
+        final dummy = createTestPhoto('meta_detail');
         final entry = createSampleEntry(
           date: DateTime(2026, 3, 21),
-          title: 'Pending Sync Test',
+          title: 'Local Detail Title',
+          location: 'Botanical Gardens',
           imagePath: dummy.path,
-          syncStatus: SyncStatus.pending,
         );
         await tester.runAsync(() async {
           await store.savePhoto(entry: entry, sourceTempPath: dummy.path);
@@ -1267,40 +949,8 @@ void main() {
         );
         await settle(tester);
 
-        expect(find.text('Waiting to back up'), findsOneWidget);
-        expect(
-          find.byWidgetPredicate(
-            (w) =>
-                w is Semantics &&
-                w.properties.label == 'Photo waiting to be backed up',
-          ),
-          findsOneWidget,
-        );
-      },
-    );
-
-    testWidgets(
-      'Failed sync state exposes actionable Try Again with clear error semantics',
-      (tester) async {
-        final dummy = createTestPhoto('failed_sync');
-        final entry = createSampleEntry(
-          date: DateTime(2026, 3, 22),
-          title: 'Failed Sync Test',
-          imagePath: dummy.path,
-          syncStatus: SyncStatus.failed,
-        );
-        await tester.runAsync(() async {
-          await store.savePhoto(entry: entry, sourceTempPath: dummy.path);
-        });
-
-        await tester.pumpWidget(
-          wrapForAccessibilityTest(PhotoDetailScreen(photoEntry: entry)),
-        );
-        await settle(tester);
-
-        expect(find.text('Backup failed'), findsOneWidget);
-        expect(find.text('Tap Try Again to retry backup'), findsOneWidget);
-        expect(find.bySemanticsLabel('Try photo backup again'), findsOneWidget);
+        expect(find.text('Local Detail Title'), findsOneWidget);
+        expect(find.text('Botanical Gardens'), findsOneWidget);
       },
     );
 

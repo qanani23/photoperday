@@ -4,14 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_per_day/core/routing/app_router.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_operation.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
-import 'package:photo_per_day/data/models/sync_tombstone.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-import 'package:photo_per_day/data/services/sync_queue.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
 import 'package:photo_per_day/screens/profile/profile_screen.dart';
 import 'package:photo_per_day/screens/statistics/statistics_screen.dart';
 import 'package:photo_per_day/widgets/settings_tile.dart';
@@ -20,7 +16,6 @@ class WidgetStatisticsFakePhotoMetadataStorage extends PhotoMetadataStorage {
   WidgetStatisticsFakePhotoMetadataStorage({super.customBaseDir});
 
   final Map<DateKey, PhotoEntry> _memory = {};
-  final List<SyncTombstone> _deletions = [];
 
   @override
   Future<void> init() async {}
@@ -35,19 +30,8 @@ class WidgetStatisticsFakePhotoMetadataStorage extends PhotoMetadataStorage {
   }
 
   @override
-  Future<List<SyncTombstone>> loadPendingDeletions() async =>
-      List.from(_deletions);
-
-  @override
-  Future<void> savePendingDeletions(List<SyncTombstone> deletions) async {
-    _deletions.clear();
-    _deletions.addAll(deletions);
-  }
-
-  @override
   Future<void> clear() async {
     _memory.clear();
-    _deletions.clear();
   }
 }
 
@@ -70,35 +54,12 @@ class WidgetStatisticsFakePhotoFileManager extends PhotoFileManager {
   Future<bool> deletePhotoFile(String? path) async => true;
 }
 
-class WidgetStatisticsFakeSyncQueueStorage extends SyncQueueStorage {
-  WidgetStatisticsFakeSyncQueueStorage({super.customBaseDir});
-
-  final List<SyncOperation> _ops = [];
-
-  @override
-  Future<void> init() async {}
-
-  @override
-  Future<List<SyncOperation>> loadQueue() async => List.from(_ops);
-
-  @override
-  Future<void> saveQueue(List<SyncOperation> operations) async {
-    _ops.clear();
-    _ops.addAll(operations);
-  }
-
-  @override
-  Future<void> clear() async => _ops.clear();
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
   late WidgetStatisticsFakePhotoMetadataStorage metadataStorage;
   late WidgetStatisticsFakePhotoFileManager fileManager;
-  late WidgetStatisticsFakeSyncQueueStorage queueStorage;
-  late SyncQueue syncQueue;
   late PersistentDailyPhotoStore photoStore;
 
   setUp(() async {
@@ -107,14 +68,10 @@ void main() {
       customBaseDir: tempDir,
     );
     fileManager = WidgetStatisticsFakePhotoFileManager(customBaseDir: tempDir);
-    queueStorage = WidgetStatisticsFakeSyncQueueStorage(customBaseDir: tempDir);
-    syncQueue = SyncQueue(storage: queueStorage);
-    await syncQueue.init();
 
     photoStore = PersistentDailyPhotoStore(
       metadataStorage: metadataStorage,
       fileManager: fileManager,
-      syncQueue: syncQueue,
     );
     await photoStore.init();
     PersistentDailyPhotoStore.setTestInstance(photoStore);
@@ -166,7 +123,7 @@ void main() {
       // Find Statistics SettingsTile under Memories & Journal
       final statisticsTile = find.widgetWithText(SettingsTile, 'Statistics');
       expect(statisticsTile, findsOneWidget);
-      expect(find.text('See your Photo a Day history'), findsOneWidget);
+      expect(find.text('See your Daria history'), findsOneWidget);
 
       await tester.ensureVisible(statisticsTile);
       await tester.pumpAndSettle();
@@ -295,7 +252,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Empty state guidance banner & CTA button
-      expect(find.text('Begin your Photo a Day journey'), findsOneWidget);
+      expect(find.text('Begin your Daria journey'), findsOneWidget);
       expect(find.text("Capture Today's Photo"), findsOneWidget);
 
       // Real 0 values in overview
@@ -315,8 +272,8 @@ void main() {
       );
       expect(
         find.text('0 days'),
-        findsNWidgets(2),
-      ); // Current streak, longest streak
+        findsNWidgets(3),
+      ); // Current streak, longest streak, longest gap
 
       // Dates are "Not available"
       expect(find.text('Not available'), findsNWidgets(2));
@@ -349,15 +306,15 @@ void main() {
       await tester.pumpAndSettle();
 
       // Initially empty
-      expect(find.text('Begin your Photo a Day journey'), findsOneWidget);
-      expect(find.text('0 days'), findsNWidgets(2));
+      expect(find.text('Begin your Daria journey'), findsOneWidget);
+      expect(find.text('0 days'), findsNWidgets(3));
 
       // 1. Add photo for today
       await addSamplePhoto(dateKey: refToday, title: 'Today Photo');
       await tester.pumpAndSettle();
 
       // Screen updates live: CTA is gone, values updated!
-      expect(find.text('Begin your Photo a Day journey'), findsNothing);
+      expect(find.text('Begin your Daria journey'), findsNothing);
       expect(
         find.descendant(
           of: find.byKey(const Key('stat_total_photos')),
@@ -383,7 +340,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Screen drops back to empty state!
-      expect(find.text('Begin your Photo a Day journey'), findsOneWidget);
+      expect(find.text('Begin your Daria journey'), findsOneWidget);
       expect(
         find.descendant(
           of: find.byKey(const Key('stat_total_photos')),
@@ -398,7 +355,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text('0 days'), findsNWidgets(2));
+      expect(find.text('0 days'), findsNWidgets(3));
       expect(find.text('Not available'), findsNWidgets(2));
     });
 

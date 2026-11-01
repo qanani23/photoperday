@@ -4,54 +4,57 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:photo_per_day/core/constants/app_constants.dart';
 import 'package:photo_per_day/core/routing/app_router.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
+import 'package:photo_per_day/data/models/day_entry.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
-import 'package:photo_per_day/data/services/sync_queue.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
 import 'package:photo_per_day/screens/diary/visual_diary_screen.dart';
 import 'package:photo_per_day/screens/home/home_screen.dart';
 import 'package:photo_per_day/screens/photo_detail/photo_detail_screen.dart';
 import 'package:photo_per_day/screens/profile/profile_screen.dart';
 import 'package:photo_per_day/widgets/visual_diary_entry.dart';
 
-import 'package:photo_per_day/data/models/sync_operation.dart';
-import 'package:photo_per_day/data/models/sync_tombstone.dart';
-
 class WidgetDiaryTestFakePhotoMetadataStorage extends PhotoMetadataStorage {
   WidgetDiaryTestFakePhotoMetadataStorage({super.customBaseDir});
 
-  final Map<DateKey, PhotoEntry> _memory = {};
-  final List<SyncTombstone> _deletions = [];
+  final Map<DateKey, DayEntry> _daysMemory = {};
 
   @override
   Future<void> init() async {}
 
   @override
-  Future<Map<DateKey, PhotoEntry>> loadAll() async => Map.from(_memory);
+  Future<Map<DateKey, DayEntry>> loadDays() async => Map.from(_daysMemory);
 
   @override
-  Future<void> saveAll(Map<DateKey, PhotoEntry> entries) async {
-    _memory.clear();
-    _memory.addAll(entries);
+  Future<void> saveDays(Map<DateKey, DayEntry> entries) async {
+    _daysMemory.clear();
+    _daysMemory.addAll(entries);
   }
 
   @override
-  Future<List<SyncTombstone>> loadPendingDeletions() async =>
-      List.from(_deletions);
+  Future<Map<DateKey, PhotoEntry>> loadAll() async {
+    final result = <DateKey, PhotoEntry>{};
+    for (final e in _daysMemory.entries) {
+      if (e.value.primaryPhoto != null) {
+        result[e.key] = e.value.primaryPhoto!;
+      }
+    }
+    return result;
+  }
 
   @override
-  Future<void> savePendingDeletions(List<SyncTombstone> deletions) async {
-    _deletions.clear();
-    _deletions.addAll(deletions);
+  Future<void> saveAll(Map<DateKey, PhotoEntry> entries) async {
+    _daysMemory.clear();
+    for (final e in entries.entries) {
+      _daysMemory[e.key] = DayEntry.fromSinglePhoto(e.value);
+    }
   }
 
   @override
   Future<void> clear() async {
-    _memory.clear();
-    _deletions.clear();
+    _daysMemory.clear();
   }
 }
 
@@ -79,37 +82,12 @@ class WidgetDiaryTestFakePhotoFileManager extends PhotoFileManager {
   ) async => [];
 }
 
-class WidgetDiaryTestFakeSyncQueueStorage extends SyncQueueStorage {
-  WidgetDiaryTestFakeSyncQueueStorage({super.customBaseDir});
-
-  final List<SyncOperation> _ops = [];
-
-  @override
-  Future<void> init() async {}
-
-  @override
-  Future<List<SyncOperation>> loadQueue() async => List.from(_ops);
-
-  @override
-  Future<void> saveQueue(List<SyncOperation> operations) async {
-    _ops.clear();
-    _ops.addAll(operations);
-  }
-
-  @override
-  Future<void> clear() async {
-    _ops.clear();
-  }
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
   late WidgetDiaryTestFakePhotoFileManager fileManager;
   late WidgetDiaryTestFakePhotoMetadataStorage metadataStorage;
-  late WidgetDiaryTestFakeSyncQueueStorage syncQueueStorage;
-  late SyncQueue syncQueue;
   late PersistentDailyPhotoStore photoStore;
 
   setUp(() async {
@@ -118,16 +96,10 @@ void main() {
     metadataStorage = WidgetDiaryTestFakePhotoMetadataStorage(
       customBaseDir: tempDir,
     );
-    syncQueueStorage = WidgetDiaryTestFakeSyncQueueStorage(
-      customBaseDir: tempDir,
-    );
-    syncQueue = SyncQueue(storage: syncQueueStorage);
-    await syncQueue.init();
 
     photoStore = PersistentDailyPhotoStore(
       fileManager: fileManager,
       metadataStorage: metadataStorage,
-      syncQueue: syncQueue,
     );
     await photoStore.init();
     PersistentDailyPhotoStore.setTestInstance(photoStore);
@@ -222,7 +194,6 @@ void main() {
   Future<PhotoEntry> addSamplePhoto({
     required DateKey dateKey,
     String title = 'Sample Title',
-    String? caption,
     String? location,
     SyncStatus syncStatus = SyncStatus.localOnly,
     String? driveFileId,
@@ -231,7 +202,6 @@ void main() {
     final entry = PhotoEntry(
       date: dateKey.toDateTime(hour: 14, minute: 30),
       title: title,
-      caption: caption,
       location: location,
       timeFormatted: '2:30 PM',
       imagePath: imageFile.path,
@@ -334,7 +304,6 @@ void main() {
         final entry = PhotoEntry(
           date: DateTime(2026, 3, 8, 11, 15),
           title: '',
-          caption: null,
           location: null,
           timeFormatted: '11:15 AM',
           imagePath: imageFile.path,
@@ -358,33 +327,24 @@ void main() {
       },
     );
 
-    testWidgets(
-      '5. Diary entry with title, multiline caption, and location displays gracefully',
-      (tester) async {
-        await addSamplePhoto(
-          dateKey: const DateKey(2026, 3, 14),
-          title: 'Sunset over Observatory',
-          caption:
-              'Golden light reflecting off the canyon hills as evening fell.',
-          location: 'Griffith Observatory, Los Angeles',
-        );
+    testWidgets('5. Diary entry with title and location displays gracefully', (
+      tester,
+    ) async {
+      await addSamplePhoto(
+        dateKey: const DateKey(2026, 3, 14),
+        title: 'Sunset over Observatory',
+        location: 'Griffith Observatory, Los Angeles',
+      );
 
-        await tester.pumpWidget(createTestWidget());
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
 
-        expect(find.text('Sunset over Observatory'), findsOneWidget);
-        expect(
-          find.text(
-            'Golden light reflecting off the canyon hills as evening fell.',
-          ),
-          findsOneWidget,
-        );
-        expect(find.text('Griffith Observatory, Los Angeles'), findsOneWidget);
-      },
-    );
+      expect(find.text('Sunset over Observatory'), findsOneWidget);
+      expect(find.text('Griffith Observatory, Los Angeles'), findsOneWidget);
+    });
 
     testWidgets(
-      '6. Sync status uses existing presentation mapping (localOnly, synced, pending, failed)',
+      '6. Diary entries render properly without obsolete cloud sync badges',
       (tester) async {
         tester.view.physicalSize = const Size(1080, 2400);
         tester.view.devicePixelRatio = 1.0;
@@ -416,9 +376,11 @@ void main() {
         await tester.pumpWidget(createTestWidget());
         await tester.pumpAndSettle();
 
-        expect(find.text('On this device'), findsOneWidget);
-        expect(find.text('Backed up'), findsOneWidget);
-        expect(find.text('Backup failed'), findsOneWidget);
+        expect(find.text('Local Photo'), findsOneWidget);
+        expect(find.text('Synced Photo'), findsOneWidget);
+        expect(find.text('Failed Photo'), findsOneWidget);
+        expect(find.text('Backed up'), findsNothing);
+        expect(find.text('Backup failed'), findsNothing);
       },
     );
 
@@ -450,7 +412,6 @@ void main() {
       await addSamplePhoto(
         dateKey: const DateKey(2026, 3, 14),
         title: 'Inspectable Memory',
-        caption: 'A moment to open and inspect.',
       );
 
       await tester.pumpWidget(
@@ -480,26 +441,26 @@ void main() {
         await addSamplePhoto(
           dateKey: dateKey,
           title: 'Original Title',
-          caption: 'Original Caption',
+          location: 'Original Location',
         );
 
         await tester.pumpWidget(createTestWidget());
         await tester.pumpAndSettle();
 
         expect(find.text('Original Title'), findsOneWidget);
-        expect(find.text('Original Caption'), findsOneWidget);
+        expect(find.text('Original Location'), findsOneWidget);
 
         // Perform metadata edit on store
         await photoStore.updatePhotoMetadata(
           dateKey: dateKey,
           title: 'Refined Journal Title',
-          caption: 'Refined prose narrative.',
+          location: 'Refined Location',
         );
         await tester.pumpAndSettle();
 
         // Invariant: Live update reflected in UI
         expect(find.text('Refined Journal Title'), findsOneWidget);
-        expect(find.text('Refined prose narrative.'), findsOneWidget);
+        expect(find.text('Refined Location'), findsOneWidget);
         expect(find.text('Original Title'), findsNothing);
       },
     );
@@ -530,8 +491,15 @@ void main() {
     );
 
     testWidgets(
-      '11. Dynamic updates: Replaced photo reflects new content in Diary',
+      '11. Dynamic updates: Second photo on same date adds card to Diary',
       (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
         const dateKey = DateKey(2026, 3, 9);
         await addSamplePhoto(dateKey: dateKey, title: 'Initial Shot');
 
@@ -540,22 +508,23 @@ void main() {
 
         expect(find.text('Initial Shot'), findsOneWidget);
 
-        // Replace photo on same date
-        final replacementImage = createDummyImage('replacement_shot');
-        final replacement = PhotoEntry(
+        // Add second photo on same date
+        final secondImage = createDummyImage('second_shot');
+        final secondEntry = PhotoEntry(
           date: dateKey.toDateTime(hour: 16, minute: 0),
-          title: 'Upgraded Replacement Shot',
-          imagePath: replacementImage.path,
+          title: 'Additional Shot Same Day',
+          imagePath: secondImage.path,
           gradientColors: const [Colors.cyan, Colors.blue],
         );
         await photoStore.savePhoto(
-          entry: replacement,
-          sourceTempPath: replacementImage.path,
+          entry: secondEntry,
+          sourceTempPath: secondImage.path,
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Upgraded Replacement Shot'), findsOneWidget);
-        expect(find.text('Initial Shot'), findsNothing);
+        expect(find.text('Additional Shot Same Day'), findsOneWidget);
+        expect(find.text('Initial Shot'), findsOneWidget);
+        expect(find.byType(VisualDiaryEntryCard), findsNWidgets(2));
       },
     );
 

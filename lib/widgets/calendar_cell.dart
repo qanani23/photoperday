@@ -4,6 +4,7 @@ import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
 
 import 'package:photo_per_day/data/models/sync_status.dart';
+import 'package:photo_per_day/widgets/today_pulse_ring.dart';
 
 /// Distinct visual states of a calendar date cell.
 enum CalendarCellStyle {
@@ -32,9 +33,12 @@ class CalendarCell extends StatelessWidget {
     this.isSelected = false,
     this.isCurrentMonth = true,
     this.isToday = false,
+    this.showTodayPulse = false,
     this.photoIcon,
     this.syncStatus,
     this.isSyncing = false,
+    this.photoCount = 0,
+    this.hasNote = false,
     this.onTap,
   });
 
@@ -44,6 +48,9 @@ class CalendarCell extends StatelessWidget {
   /// The visual style of this cell
   final CalendarCellStyle style;
 
+  /// Whether to render the subtle current-day pulse ring
+  final bool showTodayPulse;
+
   /// Optional image to display when style is [CalendarCellStyle.photo]
   final ImageProvider? imageProvider;
 
@@ -52,6 +59,12 @@ class CalendarCell extends StatelessWidget {
 
   /// Optional multi-color gradient simulating realistic photographic scenes
   final List<Color>? gradientColors;
+
+  /// Total count of photos for this day (defaults to 0, or 1 when style is photo)
+  final int photoCount;
+
+  /// Whether this day has a daily note recorded
+  final bool hasNote;
 
   /// Whether this date is currently selected by the user
   final bool isSelected;
@@ -74,6 +87,9 @@ class CalendarCell extends StatelessWidget {
   /// Tap callback
   final VoidCallback? onTap;
 
+  /// Whether this date effectively represents the current calendar day ("today")
+  bool get effectiveIsToday => isToday || style == CalendarCellStyle.today;
+
   @override
   Widget build(BuildContext context) {
     if (style == CalendarCellStyle.blank) {
@@ -88,14 +104,17 @@ class CalendarCell extends StatelessWidget {
       null => '',
     };
 
-    final effectiveIsToday = isToday || style == CalendarCellStyle.today;
     final todayPart = effectiveIsToday ? 'Today, ' : '';
+    final countPart = photoCount > 1 ? ', $photoCount photos' : '';
+    final notePart = hasNote ? ', Daily note recorded' : '';
 
     final semanticLabel = switch (style) {
       CalendarCellStyle.photo =>
-        'Day $day, ${todayPart}Photo memory captured$syncDescription',
-      CalendarCellStyle.today => 'Day $day, Today, No photo',
-      CalendarCellStyle.empty => 'Day $day, ${todayPart}No photo',
+        'Day $day, ${todayPart}Photo memory captured$countPart$notePart$syncDescription',
+      CalendarCellStyle.today =>
+        'Day $day, Today${hasNote ? ", Daily note" : ", No photo"}',
+      CalendarCellStyle.empty =>
+        'Day $day, $todayPart${hasNote ? "Daily note recorded" : "No photo"}',
       CalendarCellStyle.blank => '',
     };
 
@@ -109,6 +128,7 @@ class CalendarCell extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
+            hoverColor: AppColors.accent.withValues(alpha: 0.12),
             borderRadius: AppRadii.cell,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
@@ -150,8 +170,8 @@ class CalendarCell extends StatelessWidget {
                 Image(
                   image: ResizeImage(
                     imageProvider!,
-                    width: 140,
-                    height: 140,
+                    width: 320,
+                    height: 320,
                     allowUpscaling: false,
                   ),
                   fit: BoxFit.cover,
@@ -212,7 +232,7 @@ class CalendarCell extends StatelessWidget {
                   child: Container(
                     width: 5.5,
                     height: 5.5,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.accent,
                       shape: BoxShape.circle,
                     ),
@@ -238,7 +258,7 @@ class CalendarCell extends StatelessWidget {
                   child: Container(
                     width: 5.5,
                     height: 5.5,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.accent,
                       shape: BoxShape.circle,
                     ),
@@ -257,51 +277,152 @@ class CalendarCell extends StatelessWidget {
                     ),
                   ),
                 ),
+
+              // Subtle multi-photo indicator
+              if (photoCount > 1)
+                Positioned(
+                  bottom: 3.5,
+                  right: 3.5,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 3.0,
+                      vertical: 1.0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(4.0),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.photo_library_rounded,
+                          size: 7.5,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 1.5),
+                        Text(
+                          '$photoCount',
+                          style: const TextStyle(
+                            fontSize: 7.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            height: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Subtle note indicator for days with photo and note
+              if (hasNote)
+                Positioned(
+                  bottom: 4.0,
+                  left: 4.0,
+                  child: Container(
+                    width: 4.5,
+                    height: 4.5,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+
+              // Subtle today pulse animation for photo cell
+              if (showTodayPulse)
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(child: TodayPulseRing(radius: 40.0)),
+                  ),
+                ),
             ],
           ),
         );
 
       case CalendarCellStyle.today:
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceSubtle,
-            borderRadius: AppRadii.cell,
-          ),
-          child: Center(
-            child: Container(
-              width: 33.0,
-              height: 33.0,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.accent, width: 1.6),
-              ),
-              alignment: Alignment.center,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text('$day', style: AppTypography.cellNumberToday),
-              ),
-            ),
-          ),
-        );
-
       case CalendarCellStyle.empty:
       default:
+        if (effectiveIsToday) {
+          return Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSubtle,
+              borderRadius: AppRadii.cell,
+            ),
+            child: Center(
+              child: Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  if (showTodayPulse) const TodayPulseRing(),
+                  Container(
+                    width: 33.0,
+                    height: 33.0,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.accent, width: 1.6),
+                    ),
+                    alignment: Alignment.center,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('$day', style: AppTypography.cellNumberToday),
+                    ),
+                  ),
+                  if (hasNote)
+                    Positioned(
+                      top: 3.5,
+                      right: 3.5,
+                      child: Container(
+                        width: 4.5,
+                        height: 4.5,
+                        decoration: BoxDecoration(
+                          color: AppColors.accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }
+
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surfaceSubtle,
             borderRadius: AppRadii.cell,
           ),
-          alignment: Alignment.center,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '$day',
-              style: isCurrentMonth
-                  ? AppTypography.cellNumberEmpty
-                  : AppTypography.cellNumberEmpty.copyWith(
-                      color: AppColors.textMutedSubtle,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '$day',
+                    style: isCurrentMonth
+                        ? AppTypography.cellNumberEmpty
+                        : AppTypography.cellNumberEmpty.copyWith(
+                            color: AppColors.textMutedSubtle,
+                          ),
+                  ),
+                ),
+              ),
+              if (hasNote)
+                Positioned(
+                  top: 3.5,
+                  right: 3.5,
+                  child: Container(
+                    width: 4.5,
+                    height: 4.5,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      shape: BoxShape.circle,
                     ),
-            ),
+                  ),
+                ),
+            ],
           ),
         );
     }

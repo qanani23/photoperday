@@ -49,7 +49,7 @@ class DailyReminderService extends ChangeNotifier {
   static const int reminderNotificationId = 1001;
 
   /// Calm notification title.
-  static const String reminderTitle = 'Photo a Day';
+  static const String reminderTitle = 'Daria';
 
   /// Calm notification body.
   static const String reminderBody = "Capture today's memory.";

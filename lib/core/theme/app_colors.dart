@@ -1,56 +1,80 @@
 import 'package:flutter/material.dart';
+import 'package:photo_per_day/core/theme/app_palette.dart';
+import 'package:photo_per_day/data/services/app_theme_service.dart';
 
-/// Centralized color palette extracted from the reference design.
+/// Centralized dynamic color palette tokens for Photo a Day.
 ///
-/// Features a calm, warm linen background, subtle neutral surfaces,
-/// refined typography shades, and a distinctive caramel/gold accent.
+/// Delegates all themeable tokens to the actively selected [AppPalette] in [AppThemeService].
 abstract final class AppColors {
-  // Main background (warm linen / soft off-white)
-  static const Color background = Color(0xFFFAF7F5);
+  /// The active dynamic palette instance.
+  static AppPalette get current => AppThemeService.instance.currentPalette;
+
+  // Main background
+  static Color get background => current.background;
 
   // Surfaces
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceSubtle = Color(0xFFF0ECE9);
-  static const Color surfaceMuted = Color(0xFFE8E3DF);
-  static const Color surfaceDark = Color(0xFF1E242B);
+  static Color get surface => current.surface;
+  static Color get surfaceSubtle => current.surfaceSubtle;
+  static Color get surfaceMuted => current.surfaceMuted;
+  static Color get surfaceDark => current.surfaceDark;
 
   // Typography
-  static const Color textPrimary = Color(0xFF1A1A1A);
-  static const Color textSecondary = Color(0xFF55504D);
-  static const Color textMuted = Color(0xFF8E8A87);
-  static const Color textOnMedia = Color(0xFFFFFFFF);
+  static Color get textPrimary => current.textPrimary;
+  static Color get textSecondary => current.textSecondary;
+  static Color get textMuted => current.textMuted;
+  static Color get textOnMedia => current.textOnMedia;
 
-  // Accent & Highlights (Caramel / Gold for today's indicator ring)
-  static const Color accent = Color(0xFFC4975F);
-  static const Color accentLight = Color(0xFFF8F2EB);
+  // Accent & Highlights
+  static Color get accent => current.accent;
+  static Color get accentLight => current.accentLight;
+  static Color get accentForeground => current.accentForeground;
+
+  // Primary Buttons
+  static Color get primaryButtonBackground => current.primaryButtonBackground;
+  static Color get primaryButtonForeground => current.primaryButtonForeground;
 
   // Borders & Dividers
-  static const Color border = Color(0xFFEBE6E1);
-  static const Color borderSubtle = Color(0xFFF3EFEB);
+  static Color get border => current.border;
+  static Color get borderSubtle => current.borderSubtle;
 
   // Floating Navigation Dock
-  static const Color dockBackground = Color(0xFFFFFFFF);
-  static const Color dockBorder = Color(0xFFEAE5E0);
-  static const Color dockCapturePill = Color(0xFFF2ECE7);
+  static Color get dockBackground => current.dockBackground;
+  static Color get dockBorder => current.dockBorder;
+  static Color get dockCapturePill => current.dockCapturePill;
 
   // Overlays
   static const Color photoOverlay = Color(0x40000000);
 
   // Subtle Calendar & Placeholder Tones
-  static const Color textMutedSubtle = Color(0xFFBCB7B3);
-  static const Color surfaceDarkFallback = Color(0xFF4A4E4D);
-  static const Color placeholderGradientStart = Color(0xFFE8E2DD);
-  static const Color placeholderGradientEnd = Color(0xFFDDD6CF);
+  static Color get textMutedSubtle => current.textMuted.withValues(alpha: 0.6);
+  static Color get surfaceDarkFallback => current.surfaceDark;
+  static Color get placeholderGradientStart => current.surfaceSubtle;
+  static Color get placeholderGradientEnd => current.surfaceMuted;
 
   // Profile Status & Metric Accents
   static const Color statusActiveGreen = Color(0xFF4CAF50);
-  static const Color statDaysGreen = Color(0xFF6A7F60);
-  static const Color statStreakOrange = Color(0xFFC86D51);
-  static const Color statIconPurple = Color(0xFF6B5B95);
-  static const Color statIconBrown = Color(0xFF8A6552);
-  static const Color statIconForest = Color(0xFF4A7C59);
-  static const Color statIconBlueGrey = Color(0xFF5E6B7C);
-  static const Color statIconNeutral = Color(0xFF888888);
+  static Color get statDaysGreen =>
+      current.isDark || current.id == 'daria_red_light'
+      ? current.accent
+      : const Color(0xFF6A7F60);
+  static Color get statStreakOrange =>
+      current.isDark || current.id == 'daria_red_light'
+      ? current.accent
+      : const Color(0xFFC86D51);
+  static Color get statIconPurple =>
+      current.isDark || current.id == 'daria_red_light'
+      ? current.accent
+      : const Color(0xFF6B5B95);
+  static Color get statIconBrown =>
+      current.isDark || current.id == 'daria_red_light'
+      ? current.accent
+      : const Color(0xFF8A6552);
+  static Color get statIconForest =>
+      current.isDark ? const Color(0xFF66BB6A) : const Color(0xFF4A7C59);
+  static Color get statIconBlueGrey =>
+      current.isDark ? current.textSecondary : const Color(0xFF5E6B7C);
+  static Color get statIconNeutral =>
+      current.isDark ? current.textMuted : const Color(0xFF888888);
 
   // Status & Feedback
   static const Color error = Color(0xFFD32F2F);

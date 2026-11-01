@@ -6,9 +6,10 @@ import 'package:photo_per_day/data/models/sync_status.dart';
 /// Represents a photo memory for a given calendar date.
 class PhotoEntry {
   const PhotoEntry({
+    this.id = '',
+    this.order = 0,
     required this.date,
     required this.title,
-    this.caption,
     this.location,
     this.timeFormatted = '2:45 PM',
     required this.gradientColors,
@@ -23,9 +24,14 @@ class PhotoEntry {
     this.authorizedEmail,
   });
 
+  /// Stable unique identifier for this individual photo.
+  final String id;
+
+  /// Display order within the day entry (0-based index).
+  final int order;
+
   final DateTime date;
   final String title;
-  final String? caption;
   final String? location;
   final String timeFormatted;
   final List<Color> gradientColors;
@@ -53,6 +59,16 @@ class PhotoEntry {
   /// Google account email that authorized/owns the remote [driveFileId].
   final String? authorizedEmail;
 
+  /// Resolves a stable unique identifier for this photo, falling back to a
+  /// deterministic key if [id] is empty.
+  String get effectiveId {
+    if (id.isNotEmpty) return id;
+    final pathPart = imagePath != null && imagePath!.isNotEmpty
+        ? imagePath.hashCode.abs()
+        : title.hashCode.abs();
+    return '${dateKey.format()}_${effectiveLastModifiedAt.millisecondsSinceEpoch}_$pathPart';
+  }
+
   /// Resolves the effective last modified UTC timestamp.
   DateTime get effectiveLastModifiedAt => lastModifiedAt ?? date.toUtc();
 
@@ -79,10 +95,11 @@ class PhotoEntry {
   /// Converts this [PhotoEntry] into a JSON-serializable Map.
   Map<String, dynamic> toJson() {
     return {
+      'id': effectiveId,
+      'order': order,
       'dateKey': dateKey.format(),
       'date': date.toIso8601String(),
       'title': title,
-      'caption': caption,
       'location': location,
       'timeFormatted': timeFormatted,
       'gradientColors': gradientColors.map((c) => c.toARGB32()).toList(),
@@ -102,6 +119,9 @@ class PhotoEntry {
   /// Reconstructs a [PhotoEntry] from a JSON map with 100% backward compatibility
   /// and robust resilience against malformed fields, unexpected types, or missing keys.
   factory PhotoEntry.fromJson(Map<String, dynamic> json) {
+    final id = json['id']?.toString() ?? '';
+    final order = (json['order'] as num?)?.toInt() ?? 0;
+
     DateTime date;
     final dateRaw = json['date'];
     if (dateRaw is String) {
@@ -151,7 +171,6 @@ class PhotoEntry {
     }
 
     final title = json['title']?.toString() ?? 'Daily Capture';
-    final caption = json['caption']?.toString();
     final location = json['location']?.toString();
     final timeFormatted = json['timeFormatted']?.toString() ?? '12:00 PM';
     final category = json['category']?.toString() ?? 'Daily Life';
@@ -163,9 +182,10 @@ class PhotoEntry {
         ?.toString();
 
     return PhotoEntry(
+      id: id,
+      order: order,
       date: date,
       title: title,
-      caption: caption,
       location: location,
       timeFormatted: timeFormatted,
       gradientColors: colors,
@@ -182,10 +202,10 @@ class PhotoEntry {
   }
 
   PhotoEntry copyWith({
+    String? id,
+    int? order,
     DateTime? date,
     String? title,
-    String? caption,
-    bool clearCaption = false,
     String? location,
     bool clearLocation = false,
     String? timeFormatted,
@@ -205,9 +225,10 @@ class PhotoEntry {
     bool clearAuthorizedEmail = false,
   }) {
     return PhotoEntry(
+      id: id ?? this.id,
+      order: order ?? this.order,
       date: date ?? this.date,
       title: title ?? this.title,
-      caption: clearCaption ? null : (caption ?? this.caption),
       location: clearLocation ? null : (location ?? this.location),
       timeFormatted: timeFormatted ?? this.timeFormatted,
       gradientColors: gradientColors ?? this.gradientColors,

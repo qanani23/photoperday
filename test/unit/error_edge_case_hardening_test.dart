@@ -2,22 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:photo_per_day/data/models/daily_reminder_settings.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
-import 'package:photo_per_day/data/models/drive_folder_result.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
-import 'package:photo_per_day/data/models/sync_operation.dart';
-import 'package:photo_per_day/data/models/sync_operation_status.dart';
-import 'package:photo_per_day/data/models/sync_operation_type.dart';
 import 'package:photo_per_day/data/models/sync_status.dart';
 import 'package:photo_per_day/data/services/daily_reminder_storage.dart';
 import 'package:photo_per_day/data/services/diary_export_service.dart';
-import 'package:photo_per_day/data/services/drive_api_adapter.dart';
 import 'package:photo_per_day/data/services/photo_file_manager.dart';
 import 'package:photo_per_day/data/services/photo_metadata_storage.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
-import 'package:photo_per_day/data/services/sync_queue_storage.dart';
 
 PhotoEntry createTestEntry({
   required DateTime date,
@@ -106,7 +99,8 @@ void main() {
         final json = <String, dynamic>{
           'date': 12345, // Not a string!
           'title': 999, // Number instead of string
-          'caption': true, // Boolean instead of string
+          'location': true, // Boolean instead of string
+          'caption': true, // Obsolete legacy caption field ignored safely
           'gradientColors': ['not-a-color', null, 4294901760], // Mixed list
           'iconCodePoint': 'string-code-point', // String instead of int
           'lastModifiedAt': false, // Boolean
@@ -117,7 +111,7 @@ void main() {
 
         final entry = PhotoEntry.fromJson(json);
         expect(entry.title, '999');
-        expect(entry.caption, 'true');
+        expect(entry.location, 'true');
         expect(entry.gradientColors, isNotEmpty);
         expect(entry.date, isNotNull);
         expect(entry.lastModifiedAt, isNotNull);
@@ -143,108 +137,6 @@ void main() {
         expect(result.length, 1);
         final loaded = result[const DateKey(2026, 9, 10)]!;
         expect(loaded.dateKey, const DateKey(2026, 9, 10));
-      },
-    );
-  });
-
-  group('Milestone 37: 2. SyncQueue Corruption & Recovery', () {
-    test(
-      'Empty or non-list sync queue file returns empty list without crashing',
-      () async {
-        final storage = SyncQueueStorage(customBaseDir: tempDir);
-        await storage.init();
-        await storage.queueFile.writeAsString('');
-
-        final ops1 = await storage.loadQueue();
-        expect(ops1, isEmpty);
-
-        await storage.queueFile.writeAsString(jsonEncode({'not': 'a list'}));
-        final ops2 = await storage.loadQueue();
-        expect(ops2, isEmpty);
-      },
-    );
-
-    test(
-      'Unexpected field types in queue items parse safely with valid defaults',
-      () async {
-        final json = <String, dynamic>{
-          'dateKey': 20260910, // Number instead of string
-          'createdAt': false, // Boolean
-          'retryCount': '5', // String instead of int
-          'status': 'unknown_future_status', // Unknown status enum
-          'type': 'unknown_type', // Unknown type enum
-          'futureField': [1, 2, 3], // Future field
-        };
-
-        final op = SyncOperation.fromJson(json);
-        expect(op.dateKey, const DateKey(1970, 1, 1));
-        expect(op.retryCount, 5);
-        expect(op.status, SyncOperationStatus.pending);
-        expect(op.type, SyncOperationType.upload);
-      },
-    );
-
-    test(
-      'Crash Recovery: inProgress operations are automatically reset to pending',
-      () async {
-        final storage = SyncQueueStorage(customBaseDir: tempDir);
-        await storage.init();
-
-        final queueData = [
-          {
-            'id': 'op_1',
-            'type': 'upload',
-            'dateKey': '2026-09-10',
-            'status': 'inProgress', // Interrupted mid-upload!
-            'createdAt': '2026-09-10T12:00:00Z',
-          },
-          {
-            'id': 'op_2',
-            'type': 'update',
-            'dateKey': '2026-09-11',
-            'status': 'pending',
-            'createdAt': '2026-09-11T12:00:00Z',
-          },
-        ];
-        await storage.queueFile.writeAsString(jsonEncode(queueData));
-
-        final loaded = await storage.loadQueue();
-        expect(loaded.length, 2);
-        expect(loaded[0].id, 'op_1');
-        expect(
-          loaded[0].status,
-          SyncOperationStatus.pending,
-        ); // Reset to pending!
-        expect(loaded[1].status, SyncOperationStatus.pending);
-      },
-    );
-
-    test(
-      'Corrupted queue files with duplicate operation IDs are deduplicated',
-      () async {
-        final storage = SyncQueueStorage(customBaseDir: tempDir);
-        await storage.init();
-
-        final duplicates = [
-          {
-            'id': 'op_duplicate',
-            'type': 'upload',
-            'dateKey': '2026-09-10',
-            'status': 'pending',
-            'createdAt': '2026-09-10T12:00:00Z',
-          },
-          {
-            'id': 'op_duplicate',
-            'type': 'upload',
-            'dateKey': '2026-09-10',
-            'status': 'pending',
-            'createdAt': '2026-09-10T12:00:00Z',
-          },
-        ];
-        await storage.queueFile.writeAsString(jsonEncode(duplicates));
-
-        final loaded = await storage.loadQueue();
-        expect(loaded.length, 1);
       },
     );
   });
@@ -299,7 +191,7 @@ void main() {
 
   group('Milestone 37: 4. One-Photo-Per-Day & Replacement Edge Cases', () {
     test(
-      'Replacing photo for dateKey preserves single-entry invariant',
+      'Adding second photo for dateKey preserves both entries in DayEntry',
       () async {
         final store = PersistentDailyPhotoStore.instance;
         await store.init(customBaseDir: tempDir);
@@ -315,19 +207,26 @@ void main() {
         await store.savePhoto(entry: entry1, sourceTempPath: dummy1.path);
 
         expect(store.totalPhotos, 1);
+        expect(store.totalDays, 1);
         expect(store.getPhoto(date)!.title, 'Version 1');
 
-        // Replace with Version 2
+        // Add Version 2 to same date
         final entry2 = createTestEntry(date: date, title: 'Version 2');
         await store.savePhoto(entry: entry2, sourceTempPath: dummy2.path);
 
-        expect(store.totalPhotos, 1); // Strictly 1 entry
-        expect(store.getPhoto(date)!.title, 'Version 2');
+        expect(store.totalPhotos, 2); // 2 photos on 1 day
+        expect(store.totalDays, 1);
+        final day = store.getDay(const DateKey(2026, 9, 10));
+        expect(day!.photos.length, 2);
+        expect(
+          day.photos.map((p) => p.title),
+          containsAll(['Version 1', 'Version 2']),
+        );
       },
     );
 
     test(
-      'Replacing synced photo transitions status to pending and preserves driveFileId',
+      'Adding subsequent photo updates local status and assigns unique image path',
       () async {
         final store = PersistentDailyPhotoStore.instance;
         await store.init(customBaseDir: tempDir);
@@ -338,30 +237,29 @@ void main() {
         await dummy2.writeAsString('bytes-v2');
 
         final date = DateTime(2026, 9, 12);
-        final entry1 = createTestEntry(
-          date: date,
-          title: 'Original',
-          syncStatus: SyncStatus.synced,
-          driveFileId: 'remote_file_123',
-          authorizedEmail: 'user@example.com',
+        final entry1 = createTestEntry(date: date, title: 'Original');
+        final firstSaved = await store.savePhoto(
+          entry: entry1,
+          sourceTempPath: dummy1.path,
         );
-        await store.savePhoto(entry: entry1, sourceTempPath: dummy1.path);
 
-        // Replace
-        final entry2 = createTestEntry(date: date, title: 'Replacement');
+        // Add second photo
+        final entry2 = createTestEntry(date: date, title: 'Second Photo');
         final saved = await store.savePhoto(
           entry: entry2,
           sourceTempPath: dummy2.path,
         );
 
-        expect(saved.syncStatus, SyncStatus.pending);
-        expect(saved.driveFileId, 'remote_file_123');
-        expect(saved.authorizedEmail, 'user@example.com');
+        expect(saved.syncStatus, SyncStatus.localOnly);
+        expect(saved.title, 'Second Photo');
+        expect(saved.imagePath, isNot(equals(firstSaved.imagePath)));
+        expect(store.totalPhotos, 2);
+        expect(store.totalDays, 1);
       },
     );
 
     test(
-      'Capturing on date with pending deletion clears the tombstone',
+      'Capturing on previously deleted date successfully saves new photo',
       () async {
         final store = PersistentDailyPhotoStore.instance;
         await store.init(customBaseDir: tempDir);
@@ -374,15 +272,14 @@ void main() {
           entry: createTestEntry(
             date: key.toDateTime(),
             title: 'Old Photo',
-            syncStatus: SyncStatus.synced,
-            driveFileId: 'old_drive_id',
+            syncStatus: SyncStatus.localOnly,
           ),
           sourceTempPath: dummyOld.path,
         );
 
-        // Deleting a synced photo records a tombstone in pendingDeletions
+        // Deleting removes photo
         await store.removePhotoAsync(key.toDateTime());
-        expect(store.pendingDeletions.any((t) => t.dateKey == key), isTrue);
+        expect(store.hasPhotoByKey(key), isFalse);
 
         final dummyNew = File('${tempDir.path}/new_capture.jpg');
         await dummyNew.writeAsString('fresh-bytes');
@@ -392,8 +289,8 @@ void main() {
           sourceTempPath: dummyNew.path,
         );
 
-        // Pending deletion tombstone for that date must be cleared
-        expect(store.pendingDeletions.any((t) => t.dateKey == key), isFalse);
+        expect(store.hasPhotoByKey(key), isTrue);
+        expect(store.getPhotoByKey(key)?.title, 'New Capture');
       },
     );
   });
@@ -434,84 +331,6 @@ void main() {
 
       expect(DateKey.fromDateTime(yearEnd).format(), '2026-12-31');
       expect(DateKey.fromDateTime(newYear).format(), '2027-01-01');
-    });
-  });
-
-  group('Milestone 37: 6. Google Drive API Error Mapping', () {
-    const adapter = GoogleApisDriveAdapter();
-
-    test('DetailedApiRequestError 401 maps to unauthorized', () {
-      final error = drive.DetailedApiRequestError(401, 'Unauthorized token');
-      final mapped = adapter.mapErrorForTesting(error, 'TestContext');
-
-      expect(mapped.errorType, DriveFolderErrorType.unauthorized);
-      expect(mapped.message, contains('re-authenticate'));
-    });
-
-    test(
-      'DetailedApiRequestError 403 quota exceeded maps to quota message',
-      () {
-        final error = drive.DetailedApiRequestError(
-          403,
-          'storageQuotaExceeded: User storage limit reached',
-        );
-        final mapped = adapter.mapErrorForTesting(error, 'TestContext');
-
-        expect(mapped.errorType, DriveFolderErrorType.forbidden);
-        expect(mapped.message, contains('storage quota exceeded'));
-        expect(mapped.message, contains('local photo is safe'));
-      },
-    );
-
-    test(
-      'DetailedApiRequestError 403 rate limit maps to rate limit message',
-      () {
-        final error = drive.DetailedApiRequestError(
-          403,
-          'userRateLimitExceeded: Rate limit reached',
-        );
-        final mapped = adapter.mapErrorForTesting(error, 'TestContext');
-
-        expect(mapped.errorType, DriveFolderErrorType.forbidden);
-        expect(mapped.message, contains('rate limit exceeded'));
-      },
-    );
-
-    test('DetailedApiRequestError 404 maps to notFound', () {
-      final error = drive.DetailedApiRequestError(404, 'File not found');
-      final mapped = adapter.mapErrorForTesting(error, 'TestContext');
-
-      expect(mapped.errorType, DriveFolderErrorType.notFound);
-    });
-
-    test('DetailedApiRequestError 409 maps to conflict', () {
-      final error = drive.DetailedApiRequestError(409, 'Conflict occurred');
-      final mapped = adapter.mapErrorForTesting(error, 'TestContext');
-
-      expect(mapped.message, contains('Conflict'));
-    });
-
-    test('DetailedApiRequestError 429 maps to rate limit exceeded', () {
-      final error = drive.DetailedApiRequestError(429, 'Too many requests');
-      final mapped = adapter.mapErrorForTesting(error, 'TestContext');
-
-      expect(mapped.message, contains('rate limit exceeded (HTTP 429)'));
-    });
-
-    test('DetailedApiRequestError 500/503 maps to temporary unavailable', () {
-      final error500 = drive.DetailedApiRequestError(
-        500,
-        'Internal Server Error',
-      );
-      final mapped500 = adapter.mapErrorForTesting(error500, 'TestContext');
-      expect(mapped500.message, contains('temporarily unavailable (HTTP 500)'));
-
-      final error503 = drive.DetailedApiRequestError(
-        503,
-        'Service Unavailable',
-      );
-      final mapped503 = adapter.mapErrorForTesting(error503, 'TestContext');
-      expect(mapped503.message, contains('temporarily unavailable (HTTP 503)'));
     });
   });
 
