@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daria – Privacy Policy</title>
+  <meta name="description" content="Privacy Policy for Daria — a local-first personal daily photo diary.">
+  <link rel="icon" type="image/png" href="assets/icon.png">
+  <style>
+    :root {
+      --primary: #BA1A1A;
+      --primary-container: #FFDAD6;
+      --on-primary-container: #410002;
+      --bg: #FDF8F7;
+      --surface: #FFFFFF;
+      --surface-variant: #F5DDD8;
+      --text: #1A1C1E;
+      --text-muted: #534341;
+      --border: #E8D5D2;
+      --accent: #E04B4B;
+      --card-bg: #FFFFFF;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary: #FFB4AB;
+        --primary-container: #93000A;
+        --on-primary-container: #FFDAD6;
+        --bg: #141212;
+        --surface: #1E1B1B;
+        --surface-variant: #2D2726;
+        --text: #E6E1E0;
+        --text-muted: #D8C2BF;
+        --border: #3B3332;
+        --accent: #FF5449;
+        --card-bg: #1E1B1B;
+        --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.68;
+      padding: 32px 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 36px 32px;
+      margin-bottom: 28px;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .brand-icon {
+      width: 68px;
+      height: 68px;
+      border-radius: 18px;
+      box-shadow: 0 6px 16px rgba(186, 26, 26, 0.2);
+      object-fit: cover;
+    }
+
+    h1 {
+      font-size: 2.1rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    .tagline {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      margin-bottom: 18px;
+    }
+
+    .meta-badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: 999px;
+      background: var(--primary-container);
+      color: var(--on-primary-container);
+    }
+
+    .badge-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    /* Content Cards */
+    .content-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 32px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    h3 {
+      font-size: 1.08rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 20px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin-bottom: 14px;
+      color: var(--text);
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Key Principles Grid */
+    .principles-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .principle-item {
+      background: var(--surface-variant);
+      border-radius: 14px;
+      padding: 18px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .principle-title {
+      font-weight: 700;
+      font-size: 0.96rem;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .principle-desc {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Permissions Section */
+    .permission-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-top: 14px;
+    }
+
+    .permission-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .permission-name {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text);
+    }
+
+    .permission-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.78rem;
+      background: var(--surface-variant);
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: var(--text-muted);
+    }
+
+    .permission-detail {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+    }
+
+    .permission-detail strong {
+      color: var(--text);
+    }
+
+    /* Callout Note */
+    .callout {
+      background: var(--primary-container);
+      border: 1px solid var(--accent);
+      border-radius: 14px;
+      padding: 18px 20px;
+      margin: 18px 0;
+      color: var(--on-primary-container);
+      font-size: 0.94rem;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Lists */
+    ul {
+      margin-left: 20px;
+      margin-bottom: 14px;
+      color: var(--text-muted);
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    li strong {
+      color: var(--text);
+    }
+
+    /* Links */
+    a {
+      color: var(--primary);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    a:hover {
+      color: var(--accent);
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 28px 16px;
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    footer p {
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 16px 10px;
+      }
+      header {
+        padding: 24px 18px;
+      }
+      .content-card {
+        padding: 22px 18px;
+      }
+      h1 {
+        font-size: 1.7rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- Header -->
+    <header>
+      <div class="brand-row">
+        <img src="assets/icon.png" alt="Daria Logo" class="brand-icon">
+        <div>
+          <h1>Daria</h1>
+        </div>
+      </div>
+      <p class="tagline">Personal Daily Photo Diary — Privacy Policy</p>
+      <div class="meta-badges">
+        <span class="badge">Effective Date: November 1, 2026</span>
+        <span class="badge badge-outline">Last Updated: November 1, 2026</span>
+        <span class="badge badge-outline">Package: com.photoaday.photo_per_day</span>
+      </div>
+    </header>
+
+    <!-- Section 1: Introduction -->
+    <section class="content-card">
+      <h2>1. Introduction</h2>
+      <p>
+        Daria ("we", "our", or "the app") is a personal daily photo diary designed with a strict <strong>local-first, privacy-by-design</strong> philosophy. We believe your private memories, photos, reflections, and thoughts belong exclusively to you.
+      </p>
+      <p>
+        This Privacy Policy explains how Daria handles your information when you use our mobile and desktop applications.
+      </p>
+    </section>
+
+    <!-- Section 2: Key Principles -->
+    <section class="content-card">
+      <h2>2. Summary of Key Principles</h2>
+      <div class="principles-grid">
+        <div class="principle-item">
+          <div class="principle-title">🔒 Zero Cloud Storage</div>
+          <div class="principle-desc">All photos, notes, calendar entries, and metadata are stored exclusively on your device's local storage.</div>
+        </div>
+        <div class="principle-item">
+          <div class="principle-title">👤 No Account Required</div>
+          <div class="principle-desc">No registration, login, email address, phone number, or credentials are ever required to use Daria.</div>
+        </div>
+        <div class="principle-item">
+          <div class="principle-title">🚫 No Tracking or Analytics</div>
+          <div class="principle-desc">Zero tracking SDKs, zero analytics tools, zero crash log uploaders, and zero third-party advertising frameworks.</div>
+        </div>
+        <div class="principle-item">
+          <div class="principle-title">🛡️ No Data Monetization</div>
+          <div class="principle-desc">We never collect, sell, rent, monetize, or broker your personal information or media.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 3: Permissions & Data Usage -->
+    <section class="content-card">
+      <h2>3. Information We Access and How It Is Used</h2>
+      <p>Daria requests device permissions solely to provide its core features:</p>
+
+      <div class="permission-block">
+        <div class="permission-header">
+          <span class="permission-name">A. Camera</span>
+          <span class="permission-code">android.permission.CAMERA</span>
+        </div>
+        <div class="permission-detail">
+          <p><strong>Purpose:</strong> Used strictly when you choose to take a photo within the app to record your daily memory.</p>
+          <p><strong>Data Handling:</strong> Camera images are saved directly to your device's private application storage. They are never transmitted to external servers.</p>
+        </div>
+      </div>
+
+      <div class="permission-block">
+        <div class="permission-header">
+          <span class="permission-name">B. Device Storage / Photo Library</span>
+          <span class="permission-code">READ_EXTERNAL_STORAGE (API &le; 32) / Photo Picker (API 33+)</span>
+        </div>
+        <div class="permission-detail">
+          <p><strong>Purpose:</strong> Used only when you choose to import an existing photo from your gallery into your diary.</p>
+          <p><strong>Data Handling:</strong> Only the specific photo(s) you select are copied to your local diary directory. Daria never scans, indexes, or reads other files on your device.</p>
+        </div>
+      </div>
+
+      <div class="permission-block">
+        <div class="permission-header">
+          <span class="permission-name">C. Notifications</span>
+          <span class="permission-code">android.permission.POST_NOTIFICATIONS</span>
+        </div>
+        <div class="permission-detail">
+          <p><strong>Purpose:</strong> Used if you choose to enable daily reminder notifications to prompt you to take your daily photo.</p>
+          <p><strong>Data Handling:</strong> All reminders are scheduled locally on your device via Android's local alarm system. No push notification servers or cloud messaging tokens are used.</p>
+        </div>
+      </div>
+
+      <div class="permission-block">
+        <div class="permission-header">
+          <span class="permission-name">D. Internet Access &amp; Voluntary External Feedback</span>
+          <span class="permission-code">android.permission.INTERNET</span>
+        </div>
+        <div class="permission-detail">
+          <p><strong>Purpose:</strong> Used solely when you voluntarily interact with external links (such as submitting feedback or reporting a bug).</p>
+          <p><strong>Data Handling:</strong> Daria does not maintain a backend server and performs no background telemetry. If you tap "Report a Bug", "Suggest a Feature", or "General Feedback" in Settings, Daria opens an external web form (hosted on Tally.so) in your device's default web browser.</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">ℹ️ Note Regarding External Feedback (Tally.so)</div>
+        <p>
+          Feedback submissions are 100% voluntary. When you submit feedback via the external Tally form in your web browser, any information you provide (such as feedback comments or an optional email address for follow-up) is handled directly by Tally in accordance with <a href="https://tally.so/help/privacy-policy" target="_blank" rel="noopener noreferrer">Tally's Privacy Policy</a>. Daria never attaches device identifiers, diary entries, or private photos to feedback submissions.
+        </p>
+      </div>
+    </section>
+
+    <!-- Section 4: Storage & Backup -->
+    <section class="content-card">
+      <h2>4. Data Storage and Backup</h2>
+      <ul>
+        <li><strong>Local Application Storage:</strong> All diary data, including original photos, thumbnails, and metadata, resides in your device's private application sandbox.</li>
+        <li><strong>Backups (.padbackup):</strong> When you export a backup, Daria packages your diary into a standalone <code>.padbackup</code> archive file saved to a location you choose. You maintain complete custody and control over this file.</li>
+        <li><strong>PDF Export:</strong> If you export a PDF diary, the document is generated entirely on your device and shared using your operating system's native share sheet.</li>
+      </ul>
+    </section>
+
+    <!-- Section 5: Data Retention & Deletion -->
+    <section class="content-card">
+      <h2>5. Data Retention and Deletion</h2>
+      <p>Because Daria does not store your diary data on external servers:</p>
+      <ul>
+        <li>You can delete any individual photo or note directly within the app at any time.</li>
+        <li>You can permanently erase all diary data by clearing the app's storage in your device settings or by uninstalling the application.</li>
+        <li>Once deleted locally, your data cannot be recovered by us, as we do not keep remote backups.</li>
+      </ul>
+    </section>
+
+    <!-- Section 6: Children's Privacy -->
+    <section class="content-card">
+      <h2>6. Children's Privacy</h2>
+      <p>
+        Daria is suitable for general audiences and does not knowingly collect or solicit any personal identifiable information from children under 13 (or under the applicable age of consent in your jurisdiction).
+      </p>
+    </section>
+
+    <!-- Section 7: Changes to This Policy -->
+    <section class="content-card">
+      <h2>7. Changes to This Privacy Policy</h2>
+      <p>
+        We may update this Privacy Policy from time to time. Any updates will be posted to this public page and reflected with an updated effective date.
+      </p>
+    </section>
+
+    <!-- Section 8: Contact Us -->
+    <section class="content-card">
+      <h2>8. Contact Us</h2>
+      <p>
+        If you have questions, concerns, or feedback regarding this Privacy Policy, you can reach out via the in-app Feedback &amp; Support form or submit feedback directly via our feedback channel.
+      </p>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p><strong>Daria — Personal Daily Photo Diary</strong></p>
+      <p>&copy; 2026 Daria. All rights reserved. 100% Local-First &amp; Private.</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>
+
