@@ -5,6 +5,7 @@ import 'package:photo_per_day/core/layout/app_breakpoints.dart';
 import 'package:photo_per_day/core/theme/app_colors.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
+import 'package:photo_per_day/core/time/app_clock.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
 import 'package:photo_per_day/data/services/daily_photo_rule.dart';
@@ -13,6 +14,7 @@ import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/data/services/streak_service.dart';
 import 'package:photo_per_day/data/services/statistics_service.dart';
 import 'package:photo_per_day/screens/camera/camera_screen.dart';
+import 'package:photo_per_day/services/daily_capture_workflow.dart';
 import 'package:photo_per_day/services/gallery_photo_service.dart';
 import 'package:photo_per_day/widgets/app_header.dart';
 import 'package:photo_per_day/widgets/app_scaffold.dart';
@@ -24,15 +26,14 @@ import 'package:photo_per_day/widgets/section_header.dart';
 import 'package:photo_per_day/widgets/streak_overview_card.dart';
 import 'package:photo_per_day/widgets/weekday_header.dart';
 
-/// Full-Year Calendar Screen displaying all 12 months with year navigation,
-/// current-month auto-positioning, streak status, and preserved day preview card integration.
-class FullCalendarScreen extends StatefulWidget {
-  const FullCalendarScreen({
-    super.key,
+/// Arguments for navigating to [FullCalendarScreen].
+class FullCalendarArguments {
+  const FullCalendarArguments({
     this.wrapWithScaffold = true,
     this.onNavigateToToday,
     this.onNavigateToSettings,
     this.onNavigateToProfile,
+    this.onCaptureTap,
     this.initialDate,
     this.initialSelectedDate,
     this.store,
@@ -42,6 +43,32 @@ class FullCalendarScreen extends StatefulWidget {
   final VoidCallback? onNavigateToToday;
   final VoidCallback? onNavigateToSettings;
   final VoidCallback? onNavigateToProfile;
+  final VoidCallback? onCaptureTap;
+  final DateTime? initialDate;
+  final DateTime? initialSelectedDate;
+  final PersistentDailyPhotoStore? store;
+}
+
+/// Full-Year Calendar Screen displaying all 12 months with year navigation,
+/// current-month auto-positioning, streak status, and preserved day preview card integration.
+class FullCalendarScreen extends StatefulWidget {
+  const FullCalendarScreen({
+    super.key,
+    this.wrapWithScaffold = true,
+    this.onNavigateToToday,
+    this.onNavigateToSettings,
+    this.onNavigateToProfile,
+    this.onCaptureTap,
+    this.initialDate,
+    this.initialSelectedDate,
+    this.store,
+  });
+
+  final bool wrapWithScaffold;
+  final VoidCallback? onNavigateToToday;
+  final VoidCallback? onNavigateToSettings;
+  final VoidCallback? onNavigateToProfile;
+  final VoidCallback? onCaptureTap;
   final DateTime? initialDate;
   final DateTime? initialSelectedDate;
   final PersistentDailyPhotoStore? store;
@@ -50,7 +77,8 @@ class FullCalendarScreen extends StatefulWidget {
   State<FullCalendarScreen> createState() => _FullCalendarScreenState();
 }
 
-class _FullCalendarScreenState extends State<FullCalendarScreen> {
+class _FullCalendarScreenState extends State<FullCalendarScreen>
+    with WidgetsBindingObserver {
   final GalleryPhotoService _galleryPhotoService = GalleryPhotoService();
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _monthKeys = List.generate(12, (_) => GlobalKey());
@@ -80,7 +108,8 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
   @override
   void initState() {
     super.initState();
-    final now = widget.initialDate ?? DateTime.now();
+    WidgetsBinding.instance.addObserver(this);
+    final now = widget.initialDate ?? AppClock.now();
     _currentDate = DateTime(now.year, now.month, now.day);
     _selectedYear = _currentDate.year;
 
@@ -105,6 +134,38 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkAndUpdateDateRollover();
+    }
+  }
+
+  /// Checks if the local calendar date has rolled over past midnight or after resume.
+  void _checkAndUpdateDateRollover() {
+    if (widget.initialDate != null) return;
+    final now = AppClock.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (!DailyPhotoRule.isSameDay(today, _currentDate)) {
+      final wasSelectedToday = DailyPhotoRule.isSameDay(
+        _selectedDate,
+        _currentDate,
+      );
+      final wasViewingCurrentYear = (_selectedYear == _currentDate.year);
+      if (mounted) {
+        setState(() {
+          _currentDate = today;
+          if (wasViewingCurrentYear) {
+            _selectedYear = today.year;
+          }
+          if (wasSelectedToday) {
+            _selectedDate = today;
+          }
+        });
+      }
+    }
+  }
+
+  @override
   void didUpdateWidget(FullCalendarScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.store != oldWidget.store) {
@@ -114,7 +175,7 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
       _store.addListener(_onPhotoStoreUpdated);
     }
     if (widget.initialDate != oldWidget.initialDate) {
-      final now = widget.initialDate ?? DateTime.now();
+      final now = widget.initialDate ?? AppClock.now();
       _currentDate = DateTime(now.year, now.month, now.day);
       _selectedYear = _currentDate.year;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -125,6 +186,7 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     _store.removeListener(_onPhotoStoreUpdated);
     AppThemeService.instance.removeListener(_onPhotoStoreUpdated);
@@ -288,8 +350,84 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
     return _store.getPhotoByKey(dateKey);
   }
 
+  void _handleHomeTap() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context, 0);
+    } else {
+      Navigator.pushReplacementNamed(
+        context,
+        AppConstants.initialRoute,
+        arguments: 0,
+      );
+    }
+  }
+
+  void _handleNavigateToToday() {
+    if (widget.onNavigateToToday != null) {
+      widget.onNavigateToToday!();
+    }
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context, 1);
+    } else {
+      Navigator.pushReplacementNamed(
+        context,
+        AppConstants.initialRoute,
+        arguments: 1,
+      );
+    }
+  }
+
+  void _handleMeTap() {
+    if (widget.onNavigateToProfile != null) {
+      widget.onNavigateToProfile!();
+    }
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context, 2);
+    } else {
+      Navigator.pushReplacementNamed(
+        context,
+        AppConstants.initialRoute,
+        arguments: 2,
+      );
+    }
+  }
+
+  Future<void> _handleCaptureTap() async {
+    if (widget.onCaptureTap != null) {
+      widget.onCaptureTap!();
+      return;
+    }
+    final savedPhoto = await DailyCaptureWorkflow.execute(
+      context,
+      store: _store,
+      overrideToday: _currentDate,
+    );
+    if (savedPhoto != null && mounted) {
+      _handleNavigateToToday();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.initialDate == null) {
+      final now = AppClock.now();
+      final today = DateTime(now.year, now.month, now.day);
+      if (!DailyPhotoRule.isSameDay(today, _currentDate)) {
+        final wasSelectedToday = DailyPhotoRule.isSameDay(
+          _selectedDate,
+          _currentDate,
+        );
+        final wasViewingCurrentYear = (_selectedYear == _currentDate.year);
+        _currentDate = today;
+        if (wasViewingCurrentYear) {
+          _selectedYear = today.year;
+        }
+        if (wasSelectedToday) {
+          _selectedDate = today;
+        }
+      }
+    }
+
     final selectedKey = DateKey.fromDateTime(_selectedDate);
     final selectedPhoto = _getPhotoForDate(selectedKey);
     final isSelectedToday = DailyPhotoRule.isSameDay(
@@ -425,7 +563,7 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
                         ? (selectedPhoto == null
                               ? () => _promptPhotoSource(_selectedDate)
                               : (isSelectedToday
-                                    ? widget.onNavigateToToday
+                                    ? _handleNavigateToToday
                                     : null))
                         : null,
                     onAddPhotoTap: !isSelectedFuture
@@ -454,9 +592,9 @@ class _FullCalendarScreenState extends State<FullCalendarScreen> {
       return AppScaffold(
         currentNavIndex: 0,
         maxContentWidth: AppBreakpoints.maxContentWidth,
-        onHomeTap: () => Navigator.maybePop(context),
-        onCaptureTap: widget.onNavigateToToday,
-        onMeTap: widget.onNavigateToProfile,
+        onHomeTap: _handleHomeTap,
+        onCaptureTap: _handleCaptureTap,
+        onMeTap: _handleMeTap,
         body: content,
       );
     }

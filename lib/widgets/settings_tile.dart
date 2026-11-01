@@ -29,83 +29,94 @@ class SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: 12.0,
-        ),
-        child: Row(
-          children: [
-            // Leading Icon Badge
-            if (leadingIcon != null) ...[
-              Container(
-                width: 36.0,
-                height: 36.0,
-                decoration: BoxDecoration(
-                  color: (leadingColor ?? AppColors.accent).withValues(
-                    alpha: 0.12,
-                  ),
-                  borderRadius: BorderRadius.circular(10.0),
+    final tileContent = Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 12.0,
+      ),
+      child: Row(
+        children: [
+          // Leading Icon Badge
+          if (leadingIcon != null) ...[
+            Container(
+              width: 36.0,
+              height: 36.0,
+              decoration: BoxDecoration(
+                color: (leadingColor ?? AppColors.accent).withValues(
+                  alpha: 0.12,
                 ),
-                child: Icon(
-                  leadingIcon,
-                  size: 18.0,
-                  color: leadingColor ?? AppColors.accent,
-                ),
+                borderRadius: BorderRadius.circular(10.0),
               ),
-              const SizedBox(width: AppSpacing.md),
-            ],
-
-            // Title & Optional Subtitle
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2.0),
-                    Text(
-                      subtitle!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.caption.copyWith(
-                        fontSize: 12.0,
-                        color: AppColors.textSecondary,
-                        height: 1.25,
-                      ),
-                    ),
-                  ],
-                ],
+              child: Icon(
+                leadingIcon,
+                size: 18.0,
+                color: leadingColor ?? AppColors.accent,
               ),
             ),
-
-            // Trailing Widget or Chevron
-            if (trailing != null) ...[
-              const SizedBox(width: AppSpacing.sm),
-              trailing!,
-            ] else if (showChevron) ...[
-              const SizedBox(width: AppSpacing.sm),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 20.0,
-                color: AppColors.textMuted,
-              ),
-            ],
+            const SizedBox(width: AppSpacing.md),
           ],
-        ),
+
+          // Title & Optional Subtitle
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2.0),
+                  Text(
+                    subtitle!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(
+                      fontSize: 12.0,
+                      color: AppColors.textSecondary,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // Trailing Widget or Chevron
+          if (trailing != null) ...[
+            const SizedBox(width: AppSpacing.sm),
+            trailing!,
+          ] else if (showChevron) ...[
+            const SizedBox(width: AppSpacing.sm),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20.0,
+              color: AppColors.textMuted,
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (onTap == null) {
+      return tileContent;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: AppColors.accent.withValues(alpha: 0.08),
+        highlightColor: AppColors.surfaceSubtle.withValues(alpha: 0.35),
+        hoverColor: AppColors.surfaceSubtle.withValues(alpha: 0.4),
+        child: tileContent,
       ),
     );
   }

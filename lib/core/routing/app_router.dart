@@ -66,6 +66,22 @@ abstract final class AppRouter {
           settings: settings,
         );
       case AppConstants.fullCalendarRoute:
+        final args = settings.arguments;
+        if (args is FullCalendarArguments) {
+          return MaterialPageRoute<void>(
+            builder: (_) => FullCalendarScreen(
+              wrapWithScaffold: args.wrapWithScaffold,
+              onNavigateToToday: args.onNavigateToToday,
+              onNavigateToSettings: args.onNavigateToSettings,
+              onNavigateToProfile: args.onNavigateToProfile,
+              onCaptureTap: args.onCaptureTap,
+              initialDate: args.initialDate,
+              initialSelectedDate: args.initialSelectedDate,
+              store: args.store,
+            ),
+            settings: settings,
+          );
+        }
         return MaterialPageRoute<void>(
           builder: (_) => const FullCalendarScreen(),
           settings: settings,

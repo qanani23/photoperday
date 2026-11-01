@@ -7,6 +7,7 @@ import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_shadows.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
+import 'package:photo_per_day/core/time/app_clock.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/day_entry.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
@@ -62,7 +63,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final GalleryPhotoService _galleryPhotoService = GalleryPhotoService();
   final ScrollController _scrollController = ScrollController();
 
@@ -90,7 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    final now = widget.initialDate ?? DateTime.now();
+    WidgetsBinding.instance.addObserver(this);
+    final now = widget.initialDate ?? AppClock.now();
     _currentDate = DateTime(now.year, now.month, now.day);
 
     if (widget.initialSelectedDate != null) {
@@ -110,6 +112,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkAndUpdateDateRollover();
+    }
+  }
+
+  /// Checks if the local calendar date has rolled over past midnight or after resume.
+  void _checkAndUpdateDateRollover() {
+    if (widget.initialDate != null) return;
+    final now = AppClock.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (!DailyPhotoRule.isSameDay(today, _currentDate)) {
+      final wasSelectedToday = DailyPhotoRule.isSameDay(
+        _selectedDate,
+        _currentDate,
+      );
+      if (mounted) {
+        setState(() {
+          _currentDate = today;
+          if (wasSelectedToday) {
+            _selectedDate = today;
+          }
+        });
+      }
+    }
+  }
+
+  @override
   void didUpdateWidget(HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.store != oldWidget.store) {
@@ -119,13 +149,14 @@ class _HomeScreenState extends State<HomeScreen> {
       _store.addListener(_onPhotoStoreUpdated);
     }
     if (widget.initialDate != oldWidget.initialDate) {
-      final now = widget.initialDate ?? DateTime.now();
+      final now = widget.initialDate ?? AppClock.now();
       _currentDate = DateTime(now.year, now.month, now.day);
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
     _store.removeListener(_onPhotoStoreUpdated);
     AppThemeService.instance.removeListener(_onPhotoStoreUpdated);
@@ -246,8 +277,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _navigateToFullCalendar() {
-    Navigator.pushNamed(context, AppConstants.fullCalendarRoute);
+  Future<void> _navigateToFullCalendar() async {
+    final result = await Navigator.pushNamed(
+      context,
+      AppConstants.fullCalendarRoute,
+      arguments: FullCalendarArguments(
+        onNavigateToToday: widget.onNavigateToToday,
+        onNavigateToSettings: widget.onNavigateToSettings,
+        onNavigateToProfile: widget.onNavigateToProfile,
+        initialDate: _currentDate,
+        initialSelectedDate: _selectedDate,
+        store: _store,
+      ),
+    );
+    if (result is int && mounted) {
+      if (result == 1 && widget.onNavigateToToday != null) {
+        widget.onNavigateToToday!();
+      } else if (result == 2 && widget.onNavigateToProfile != null) {
+        widget.onNavigateToProfile!();
+      }
+    }
   }
 
   @override
@@ -262,6 +311,22 @@ class _HomeScreenState extends State<HomeScreen> {
         initialSelectedDate: widget.initialSelectedDate,
         store: widget.store,
       );
+    }
+
+    // Ensure current date is fresh (e.g. overnight boundary crossed while app is open)
+    if (widget.initialDate == null) {
+      final now = AppClock.now();
+      final today = DateTime(now.year, now.month, now.day);
+      if (!DailyPhotoRule.isSameDay(today, _currentDate)) {
+        final wasSelectedToday = DailyPhotoRule.isSameDay(
+          _selectedDate,
+          _currentDate,
+        );
+        _currentDate = today;
+        if (wasSelectedToday) {
+          _selectedDate = today;
+        }
+      }
     }
 
     final todayKey = DateKey.fromDateTime(_currentDate);
@@ -349,7 +414,9 @@ class _HomeScreenState extends State<HomeScreen> {
       return AppScaffold(
         currentNavIndex: 0,
         maxContentWidth: AppBreakpoints.maxContentWidth,
+        onHomeTap: () => Navigator.maybePop(context),
         onCaptureTap: widget.onNavigateToToday,
+        onMeTap: widget.onNavigateToProfile,
         body: content,
       );
     }

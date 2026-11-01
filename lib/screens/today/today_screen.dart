@@ -6,6 +6,7 @@ import 'package:photo_per_day/core/theme/app_radii.dart';
 import 'package:photo_per_day/core/theme/app_shadows.dart';
 import 'package:photo_per_day/core/theme/app_spacing.dart';
 import 'package:photo_per_day/core/theme/app_typography.dart';
+import 'package:photo_per_day/core/time/app_clock.dart';
 import 'package:photo_per_day/data/models/date_key.dart';
 import 'package:photo_per_day/data/models/day_entry.dart';
 import 'package:photo_per_day/data/models/photo_entry.dart';
@@ -59,7 +60,7 @@ class _TodayScreenState extends State<TodayScreen> {
         widget.todayDate!.day,
       );
     }
-    final now = DateTime.now();
+    final now = AppClock.now();
     return DateTime(now.year, now.month, now.day);
   }
 
@@ -200,7 +201,7 @@ class _TodayScreenState extends State<TodayScreen> {
       try {
         PhotoEntry? lastPersisted;
         for (final capturedPath in capturedPaths) {
-          final now = DateTime.now();
+          final now = AppClock.now();
           final period = now.hour >= 12 ? 'PM' : 'AM';
           final hour12 = now.hour % 12 == 0 ? 12 : now.hour % 12;
           final minuteFormatted = now.minute.toString().padLeft(2, '0');

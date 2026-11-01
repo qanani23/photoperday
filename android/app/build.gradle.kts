@@ -51,6 +51,34 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val output = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output?.outputFileName = "Daria-${name}.apk"
+        }
+    }
+}
+
+gradle.buildFinished {
+    val buildRoot = rootProject.layout.buildDirectory.asFile.get()
+    val debugApk = File(buildRoot, "app/outputs/apk/debug/Daria-debug.apk")
+    val releaseApk = File(buildRoot, "app/outputs/apk/release/Daria-release.apk")
+    val flutterApkDir = File(buildRoot, "app/outputs/flutter-apk")
+    if (flutterApkDir.exists()) {
+        if (debugApk.exists()) {
+            debugApk.copyTo(File(flutterApkDir, "Daria-debug.apk"), overwrite = true)
+            debugApk.copyTo(File(flutterApkDir, "Daria.apk"), overwrite = true)
+        }
+        if (releaseApk.exists()) {
+            releaseApk.copyTo(File(flutterApkDir, "Daria-release.apk"), overwrite = true)
+            releaseApk.copyTo(File(flutterApkDir, "Daria.apk"), overwrite = true)
         }
     }
 }

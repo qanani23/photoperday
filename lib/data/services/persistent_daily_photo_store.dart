@@ -471,8 +471,6 @@ class PersistentDailyPhotoStore extends ChangeNotifier
 
   /// Removes an individual photo by stable ID.
   ///
-  /// Removes an individual photo by stable ID.
-  ///
   /// If [preserveNoteOnlyDay] is true and the day has a non-empty note,
   /// the day entry is retained as a note-only day when its last photo is removed.
   /// Otherwise, removes the empty day entry completely (returning null).

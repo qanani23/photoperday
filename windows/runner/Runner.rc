@@ -92,9 +92,9 @@ BEGIN
             VALUE "CompanyName", "com.photoaday" "\0"
             VALUE "FileDescription", "Daria" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "photo_per_day" "\0"
+            VALUE "InternalName", "Daria" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.photoaday. All rights reserved." "\0"
-            VALUE "OriginalFilename", "photo_per_day.exe" "\0"
+            VALUE "OriginalFilename", "Daria.exe" "\0"
             VALUE "ProductName", "Daria" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END

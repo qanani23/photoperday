@@ -3,6 +3,9 @@ abstract final class AppConstants {
   static const String appName = 'Daria';
   static const String appVersion = '1.0.0';
 
+  // Feedback & Support Configuration
+  static const String tallyFeedbackUrl = 'https://tally.so/r/perLYE';
+
   // Route Names
   static const String initialRoute = '/';
   static const String onboardingRoute = '/onboarding';

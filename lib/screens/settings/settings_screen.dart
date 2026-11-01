@@ -9,6 +9,7 @@ import 'package:photo_per_day/core/theme/app_typography.dart';
 import 'package:photo_per_day/data/services/app_theme_service.dart';
 import 'package:photo_per_day/data/services/daily_reminder_service.dart';
 import 'package:photo_per_day/data/services/diary_export_service.dart';
+import 'package:photo_per_day/data/services/feedback_service.dart';
 import 'package:photo_per_day/data/services/local_storage_calculator.dart';
 import 'package:photo_per_day/data/services/persistent_daily_photo_store.dart';
 import 'package:photo_per_day/widgets/pad_backup_export_dialog.dart';
@@ -437,6 +438,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _handleFeedback(FeedbackCategory category) async {
+    await FeedbackService.instance.launchFeedback(
+      category: category,
+      context: context,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -840,6 +848,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     onTap: _isDeletingLocal
                                         ? null
                                         : _handleDeleteLocalDiary,
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: AppSpacing.lg),
+
+                              // Feedback & Support
+                              SettingsGroup(
+                                title: 'Feedback & Support',
+                                children: [
+                                  SettingsTile(
+                                    title: 'Report a Bug',
+                                    subtitle:
+                                        "Found something that isn't working correctly? Let me know.",
+                                    leadingIcon: Icons.bug_report_outlined,
+                                    leadingColor: AppColors.error,
+                                    showChevron: true,
+                                    onTap: () => _handleFeedback(
+                                      FeedbackCategory.bugReport,
+                                    ),
+                                  ),
+                                  SettingsTile(
+                                    title: 'Suggest a Feature',
+                                    subtitle:
+                                        'Have an idea that could make Daria better? Share it with me.',
+                                    leadingIcon: Icons.lightbulb_outlined,
+                                    leadingColor: AppColors.accent,
+                                    showChevron: true,
+                                    onTap: () => _handleFeedback(
+                                      FeedbackCategory.featureRequest,
+                                    ),
+                                  ),
+                                  SettingsTile(
+                                    title: 'General Feedback',
+                                    subtitle:
+                                        "Questions, thoughts, or suggestions? I'd love to hear from you.",
+                                    leadingIcon:
+                                        Icons.chat_bubble_outline_rounded,
+                                    leadingColor: AppColors.statDaysGreen,
+                                    showChevron: true,
+                                    onTap: () => _handleFeedback(
+                                      FeedbackCategory.generalFeedback,
+                                    ),
                                   ),
                                 ],
                               ),

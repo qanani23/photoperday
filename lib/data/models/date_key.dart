@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:photo_per_day/core/time/app_clock.dart';
 
 /// Immutable value object representing a normalized calendar date (year, month, day).
 ///
@@ -24,7 +25,7 @@ class DateKey implements Comparable<DateKey> {
 
   /// Creates a [DateKey] representing today's date in local time.
   factory DateKey.today() {
-    return DateKey.fromDateTime(DateTime.now());
+    return DateKey.fromDateTime(AppClock.now());
   }
 
   /// Parses an ISO calendar-date string formatted as 'YYYY-MM-DD'.

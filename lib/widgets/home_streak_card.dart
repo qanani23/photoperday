@@ -237,19 +237,58 @@ class HomeStreakCard extends StatelessWidget {
     required Color flameColor,
     required Color flameBgColor,
   }) {
+    if (!streakSummary.isCurrentStreakActive) {
+      return Container(
+        key: const ValueKey('home_streak_flame_icon'),
+        width: 44.0,
+        height: 44.0,
+        decoration: BoxDecoration(
+          color: flameBgColor,
+          borderRadius: BorderRadius.circular(14.0),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.local_fire_department_rounded,
+          size: 26.0,
+          color: flameColor,
+        ),
+      );
+    }
+
     return Container(
       key: const ValueKey('home_streak_flame_icon'),
-      width: 40.0,
-      height: 40.0,
+      width: 44.0,
+      height: 44.0,
       decoration: BoxDecoration(
         color: flameBgColor,
-        borderRadius: BorderRadius.circular(12.0),
+        borderRadius: BorderRadius.circular(14.0),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF5722).withValues(alpha: 0.22),
+            blurRadius: 12.0,
+            spreadRadius: 1.0,
+          ),
+        ],
       ),
       alignment: Alignment.center,
-      child: Icon(
-        Icons.local_fire_department_rounded,
-        size: 24.0,
-        color: flameColor,
+      child: ShaderMask(
+        shaderCallback: (bounds) => const LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [
+            Color(0xFFFFFDE7),
+            Color(0xFFFFEE58),
+            Color(0xFFFF9800),
+            Color(0xFFFF3D00),
+            Color(0xFFD50000),
+          ],
+          stops: [0.0, 0.22, 0.52, 0.78, 1.0],
+        ).createShader(bounds),
+        child: const Icon(
+          Icons.local_fire_department_rounded,
+          size: 28.0,
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -265,10 +304,10 @@ class HomeStreakCard extends StatelessWidget {
           streakSummary.currentStreak.toString(),
           key: const ValueKey('streak_display_number'),
           style: TextStyle(
-            fontSize: 26.0,
-            fontWeight: FontWeight.w800,
+            fontSize: 28.0,
+            fontWeight: FontWeight.w900,
             color: isActive ? AppColors.textPrimary : AppColors.textMuted,
-            letterSpacing: -0.8,
+            letterSpacing: -1.0,
             height: 1.0,
           ),
         ),
